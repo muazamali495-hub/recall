@@ -1,0 +1,26 @@
+# --- secrets: NEVER commit these ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- supabase ---
+supabase/.temp/
+supabase/.branches/
+
+# --- node ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# --- next.js ---
+.next/
+out/
+build/
+next-env.d.ts
+
+# --- misc ---
+.DS_Store
+Thumbs.db
+.vercel

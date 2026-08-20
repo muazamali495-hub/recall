@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Recall — Slate Sync",
+  "version": "0.1.0",
+  "description": "Keeps your Slate quiz and assignment deadlines in sync with Recall.",
+  "permissions": ["storage", "alarms", "scripting"],
+  "host_permissions": [
+    "https://slate.uol.edu.pk/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Recall",
+    "default_popup": "popup.html"
+  }
+}

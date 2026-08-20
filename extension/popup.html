@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Recall</title>
+    <style>
+      :root {
+        --ground: #0a0d15;
+        --surface: #141a2b;
+        --line: rgba(255, 255, 255, 0.1);
+        --line-2: rgba(255, 255, 255, 0.16);
+        --text: #eaeefb;
+        --muted: #98a2be;
+        --faint: #6a7492;
+        --mint: #57e6c1;
+        --amber: #ffb65c;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        width: 320px;
+        padding: 16px;
+        background: var(--ground);
+        color: var(--text);
+        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-weight: 700; }
+      label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; }
+      input {
+        width: 100%; padding: 9px 11px; margin-bottom: 12px;
+        background: rgba(255,255,255,.04); border: 1px solid var(--line-2);
+        border-radius: 9px; color: var(--text); font: inherit;
+      }
+      input::placeholder { color: var(--faint); }
+      input:focus { outline: 2px solid var(--mint); outline-offset: 1px; border-color: transparent; }
+      button {
+        width: 100%; padding: 10px; border: 0; border-radius: 9px;
+        background: var(--mint); color: #04231d; font: inherit; font-weight: 700; cursor: pointer;
+      }
+      button:disabled { opacity: .6; cursor: not-allowed; }
+      button.ghost { background: transparent; border: 1px solid var(--line-2); color: var(--muted); font-weight: 600; }
+      .hint { color: var(--faint); font-size: 11px; margin-bottom: 12px; }
+      .msg { margin-top: 12px; padding: 9px 11px; border-radius: 9px; font-size: 12px; }
+      .msg.ok { background: rgba(87,230,193,.1); border: 1px solid rgba(87,230,193,.28); color: var(--mint); }
+      .msg.bad { background: rgba(255,182,92,.08); border: 1px solid rgba(255,182,92,.28); color: var(--amber); }
+      .stack { display: flex; flex-direction: column; gap: 8px; }
+      hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+        <rect x="1.5" y="1.5" width="29" height="29" rx="9" fill="#0E1424" stroke="#57E6C1" stroke-opacity=".5"/>
+        <path d="M9 21V11M9 16h7M16 11v10" stroke="#57E6C1" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M19.5 16.8l2.2 2.2 4-4.6" stroke="#FFB65C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Recall
+    </div>
+
+    <!-- Step 1: pair -->
+    <section id="pairView">
+      <label for="code">Pairing code</label>
+      <input id="code" placeholder="ABCD1234" autocomplete="off" spellcheck="false" />
+      <p class="hint">Open Recall &rarr; Connect Slate to get your code.</p>
+      <button id="pairBtn">Link to my account</button>
+    </section>
+
+    <!-- Step 2: everyday use -->
+    <section id="mainView" class="hidden">
+      <label for="url">Slate calendar link</label>
+      <input id="url" placeholder="https://slate.uol.edu.pk/calendar/export_execute.php?…" />
+      <p class="hint">Stays on this computer. Recall never receives it.</p>
+      <div class="stack">
+        <button id="syncBtn">Sync now</button>
+        <button id="unpairBtn" class="ghost">Unlink this device</button>
+      </div>
+    </section>
+
+    <div id="msg" class="msg hidden"></div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

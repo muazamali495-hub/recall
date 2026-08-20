@@ -1,0 +1,213 @@
+/* The dashboard's centrepiece: a tilted, glowing "Today" deck that carries the
+   same depth as the landing page's hero. */
+
+.stage {
+  position: relative;
+  perspective: 1500px;
+  perspective-origin: 55% 35%;
+  padding: 34px 0 46px;
+}
+
+.glow {
+  position: absolute;
+  inset: -8% -6% 4%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(87, 230, 193, 0.16), transparent 72%);
+  filter: blur(38px);
+  pointer-events: none;
+}
+
+.glowAmber {
+  position: absolute;
+  right: -4%;
+  bottom: 6%;
+  width: 42%;
+  height: 55%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 182, 92, 0.13), transparent 70%);
+  filter: blur(42px);
+  pointer-events: none;
+}
+
+.deck {
+  position: relative;
+  z-index: 1;
+  transform-style: preserve-3d;
+  transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: transform;
+}
+
+.panel {
+  position: relative;
+  z-index: 2;
+  border-radius: 24px;
+  border: 1px solid var(--line-2);
+  background: linear-gradient(165deg, rgba(28, 36, 60, 0.94), rgba(14, 18, 32, 0.96));
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+/* Hairline of light along the top edge, like the landing's feature cards. */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(87, 230, 193, 0.55), transparent);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--mint);
+  background: rgba(87, 230, 193, 0.1);
+  border: 1px solid rgba(87, 230, 193, 0.25);
+  padding: 5px 11px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mint);
+  animation: pulse 2.2s infinite;
+}
+.liveOff {
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line-2);
+}
+.liveOff i {
+  background: var(--faint);
+  animation: none;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(87, 230, 193, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(87, 230, 193, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(87, 230, 193, 0); }
+}
+
+/* Two columns inside the deck: classes on the left, what's due on the right. */
+.cols {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+}
+.col {
+  padding: 18px 20px 22px;
+  min-width: 0;
+}
+.col + .col {
+  border-left: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.012);
+}
+@media (max-width: 760px) {
+  .cols { grid-template-columns: 1fr; }
+  .col + .col { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+.colHead {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 14px;
+}
+
+/* ---- Countdown ring ---- */
+.ring {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+}
+.ring svg { transform: rotate(-90deg); }
+.ringTrack { stroke: rgba(255, 255, 255, 0.08); }
+.ringFill {
+  stroke: var(--mint);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+.ringLabel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mint);
+}
+
+/* ---- Floating chips ---- */
+.chip {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  border-radius: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: linear-gradient(160deg, rgba(32, 41, 68, 0.97), rgba(18, 23, 39, 0.97));
+  border: 1px solid var(--line-2);
+  box-shadow: 0 24px 48px -22px rgba(0, 0, 0, 0.9);
+  animation: floaty 6.5s ease-in-out infinite;
+}
+.chipRight { top: -22px; right: -18px; }
+.chipLeft { bottom: -20px; left: -22px; animation-delay: -3.2s; }
+.ci {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.lab {
+  color: var(--faint);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.val {
+  font-size: 0.86rem;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@media (max-width: 640px) {
+  .chipRight { top: -14px; right: -6px; transform: scale(0.88); }
+  .chipLeft { bottom: -12px; left: -6px; transform: scale(0.88); }
+  .stage { padding: 26px 0 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck { transition: none !important; transform: none !important; }
+  .chip, .live i { animation: none !important; }
+}
