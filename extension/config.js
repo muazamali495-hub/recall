@@ -1,5 +1,5 @@
-// Where Recall lives. Change this to your deployed URL when you ship.
-export const RECALL_ORIGIN = "http://localhost:3000";
+// Where Recall lives. Point this at localhost while developing.
+export const RECALL_ORIGIN = "https://recall-kohl-mu.vercel.app";
 
 // How often to check Slate. Chrome only fires alarms while the browser runs,
 // so this is "about every 6 hours that you're using your computer".

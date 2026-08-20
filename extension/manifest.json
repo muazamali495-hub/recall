@@ -6,6 +6,7 @@
   "permissions": ["storage", "alarms", "scripting"],
   "host_permissions": [
     "https://slate.uol.edu.pk/*",
+    "https://recall-kohl-mu.vercel.app/*",
     "http://localhost:3000/*"
   ],
   "background": {
