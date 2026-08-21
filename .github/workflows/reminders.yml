@@ -1,0 +1,45 @@
+name: Send due reminders
+
+# Vercel's Hobby plan only allows one cron run per day, which is useless for
+# reminders. GitHub Actions is free on public repositories and runs far more
+# often, so it drives the job instead.
+#
+# Note: GitHub's scheduler is best-effort and can run late under load. The
+# reminder windows (30 min / 2h / 24h) are wide enough to absorb that, and
+# nothing is ever sent twice because each reminder is claimed in the database
+# before it goes out.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes
+  workflow_dispatch: # lets you trigger a run by hand from the Actions tab
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder run
+        env:
+          RECALL_URL: ${{ secrets.RECALL_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$RECALL_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::Set the RECALL_URL and CRON_SECRET repository secrets."
+            exit 1
+          fi
+
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 60 \
+            "$RECALL_URL/api/cron/reminders")
+
+          body=$(echo "$response" | head -n -1)
+          code=$(echo "$response" | tail -n 1)
+
+          echo "HTTP $code"
+          echo "$body"
+
+          if [ "$code" != "200" ]; then
+            echo "::error::Reminder run failed with HTTP $code"
+            exit 1
+          fi
