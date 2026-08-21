@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { PRIMARY_DOMAIN, wrongDomainMessage } from "@/lib/allowed-email";
 
 /**
  * Starts the Google OAuth flow.
@@ -13,6 +14,14 @@ export function SignInButton() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The callback redirects here with ?error=wrong-domain when someone signs
+  // in with a non-UOL Google account.
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("error");
+    if (reason === "wrong-domain") setError(wrongDomainMessage());
+    else if (reason === "sign-in-failed") setError("Sign-in did not complete. Please try again.");
+  }, []);
+
   async function signIn() {
     setLoading(true);
     setError(null);
@@ -22,6 +31,12 @@ export function SignInButton() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          // Asks Google to show only University of Lahore accounts. This is a
+          // convenience, NOT the restriction — it can be bypassed, so the real
+          // check happens server-side in /auth/callback.
+          hd: PRIMARY_DOMAIN,
+        },
       },
     });
 
@@ -60,7 +75,7 @@ export function SignInButton() {
       </button>
 
       <p className="text-xs text-faint">
-        Use your UOL account. We never see your password.
+        Use your @student.uol.edu.pk account. We never see your password.
       </p>
 
       {error && (
