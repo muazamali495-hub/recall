@@ -36,6 +36,11 @@ export function SignInButton() {
           // convenience, NOT the restriction — it can be bypassed, so the real
           // check happens server-side in /auth/callback.
           hd: PRIMARY_DOMAIN,
+
+          // Always show the account chooser. Without this Google silently
+          // reuses whichever account it last authenticated, so a shared or
+          // previously-used login gets picked with no way to switch.
+          prompt: "select_account",
         },
       },
     });
