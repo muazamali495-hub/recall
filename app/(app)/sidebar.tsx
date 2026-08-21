@@ -152,6 +152,23 @@ export function Sidebar({ name, email }: { name: string | null; email: string })
       {open && (
         <div className="sticky top-14 z-40 border-b border-line bg-ground/95 px-4 py-3 backdrop-blur-xl lg:hidden">
           <NavList onNavigate={() => setOpen(false)} />
+
+          {/* Sign out lives in the desktop sidebar too, but that is hidden on
+              mobile — without this there is no way to log out on a phone. */}
+          <div className="mt-3 border-t border-line pt-3">
+            <div className="mb-2 px-1">
+              <p className="truncate text-sm font-medium tracking-tight">{name ?? "Student"}</p>
+              <p className="truncate text-[0.7rem] text-faint">{email}</p>
+            </div>
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="w-full rounded-xl border border-line-2 px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-white/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       )}
 

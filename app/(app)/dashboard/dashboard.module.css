@@ -211,3 +211,24 @@
   .deck { transition: none !important; transform: none !important; }
   .chip, .live i { animation: none !important; }
 }
+
+/* ---------- Mobile: no cursor to follow ----------
+   Same reasoning as the landing hero — mousemove never fires on touch, so the
+   deck would sit flat. CSS sways it instead; the JS skips (hover: none) so it
+   doesn't overwrite this with an inline transform. */
+@media (hover: none) {
+  .deck {
+    animation: deckSway 12s ease-in-out infinite;
+    transition: none;
+  }
+}
+
+@keyframes deckSway {
+  0%,
+  100% { transform: rotateX(3.5deg) rotateY(-5deg); }
+  50%  { transform: rotateX(1.5deg) rotateY(5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck { animation: none; transform: rotateX(3deg) rotateY(-4deg); }
+}

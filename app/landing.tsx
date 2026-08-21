@@ -29,6 +29,10 @@ export function Landing() {
     if (!deck || !scene) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
+    // A touch screen has no cursor to follow, and setting an inline transform
+    // here would override the CSS sway that stands in for it on mobile.
+    if (window.matchMedia("(hover: none)").matches) return;
+
     let raf: number | null = null;
     let tx = 0, ty = 0, cx = 0, cy = 0;
 
