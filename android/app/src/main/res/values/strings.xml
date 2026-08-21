@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Recall</string>
+    <string name="setup_intro">Two quick steps, then your deadlines sync on their own.</string>
+
+    <string name="step_pair">1. Link this phone</string>
+    <string name="step_pair_hint">Open Recall on any device, go to Slate, and generate a pairing code.</string>
+    <string name="code_hint">ABCD1234</string>
+    <string name="link_account">Link to my account</string>
+
+    <string name="step_url">2. Your Slate calendar link</string>
+    <string name="step_url_hint">Slate, then Calendar, then Export, then Get calendar URL. It stays on this phone.</string>
+    <string name="url_hint">https://slate.uol.edu.pk/calendar/export_execute.php</string>
+    <string name="save_and_sync">Save and sync</string>
+
+    <string name="sync_now">Sync now</string>
+    <string name="enter_code">Enter the code from Recall.</string>
+    <string name="linking">Linking…</string>
+    <string name="linked">Linked. Now add your calendar link.</string>
+    <string name="could_not_link">Could not link this phone.</string>
+    <string name="url_must_be_https">The link must start with https://</string>
+    <string name="saved_syncing">Saved. Checking Slate…</string>
+    <string name="checking_slate">Checking Slate…</string>
+    <string name="synced_events">Synced %1$d events.</string>
+    <string name="sync_failed">Sync failed.</string>
+</resources>
