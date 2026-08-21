@@ -46,6 +46,9 @@ dependencies {
   implementation("androidx.appcompat:appcompat:1.7.0")
   implementation("androidx.activity:activity-ktx:1.9.3")
 
+  // Chrome Custom Tabs: Google refuses to render its sign-in inside a WebView.
+  implementation("androidx.browser:browser:1.8.0")
+
   // Periodic background sync. Unlike iOS, Android actually guarantees this.
   implementation("androidx.work:work-runtime-ktx:2.10.0")
 }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { PairingCode } from "./pairing-code";
+import { ConnectSwitch } from "./connect-switch";
 
 const STEPS = [
   {
@@ -41,7 +41,10 @@ export default async function ConnectPage() {
         your computer — we only ever receive the deadlines themselves.
       </p>
 
-      <ol className="mb-8 flex flex-col gap-3">
+      <ConnectSwitch
+        alreadyLinked={linked}
+        steps={
+          <ol className="mb-8 flex flex-col gap-3">
         {STEPS.map((step, i) => (
           <li key={i} className="flex gap-3 rounded-xl border border-line bg-white/[0.02] p-4">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-mint/25 bg-mint/10 text-xs font-bold text-mint">
@@ -54,8 +57,8 @@ export default async function ConnectPage() {
           </li>
         ))}
       </ol>
-
-      <PairingCode alreadyLinked={linked} />
+        }
+      />
 
       {linked && devices && (
         <section className="mt-8">

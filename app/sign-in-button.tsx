@@ -27,10 +27,18 @@ export function SignInButton() {
     setError(null);
 
     const supabase = createClient();
+
+    // Inside the Android app, Google will not render its sign-in in a WebView,
+    // so the app opens it in a Chrome Custom Tab. That tab has its own cookie
+    // jar, so the result has to come back via a deep link the app can catch —
+    // it then replays the code into the WebView, where the session belongs.
+    const inApp =
+      typeof navigator !== "undefined" && navigator.userAgent.includes("RecallAndroid");
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: inApp ? "recall://auth" : `${window.location.origin}/auth/callback`,
         queryParams: {
           // Asks Google to show only University of Lahore accounts. This is a
           // convenience, NOT the restriction — it can be bypassed, so the real

@@ -1,37 +1,38 @@
 package pk.edu.uol.recall
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.*
+import android.webkit.*
+import android.widget.ProgressBar
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
-import androidx.work.WorkInfo
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import pk.edu.uol.recall.Store.deviceToken
 import pk.edu.uol.recall.Store.icalUrl
-import pk.edu.uol.recall.Store.lastError
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
- * Two screens in one.
+ * The whole app: Recall's website, plus the two things a website cannot do.
  *
- * Once the phone is linked and knows the calendar URL, it just shows Recall's
- * website — no point rebuilding a dashboard that already exists and stays in
- * step with the web app. The setup screen only appears when something is
- * missing.
+ * 1. **Google sign-in.** Google refuses to render its login inside a WebView,
+ *    so that one step opens in a Chrome Custom Tab and comes back through a
+ *    deep link. Everything else stays in the app.
+ *
+ * 2. **Fetching Slate.** Handled by SyncWorker in the background.
+ *
+ * There is no pairing screen. Once the student is signed in, the app quietly
+ * mints its own device token — asking someone to copy a code between two
+ * halves of the same app would be friction for nothing.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var web: WebView
-    private lateinit var setup: View
-    private lateinit var status: TextView
+    private lateinit var progress: ProgressBar
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,126 +40,176 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         web = findViewById(R.id.web)
-        setup = findViewById(R.id.setup)
-        status = findViewById(R.id.status)
+        progress = findViewById(R.id.progress)
 
-        web.settings.javaScriptEnabled = true
-        web.settings.domStorageEnabled = true
-        web.webViewClient = WebViewClient()
+        with(web.settings) {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            mediaPlaybackRequiresUserGesture = false
 
-        findViewById<Button>(R.id.pairButton).setOnClickListener { pair() }
-        findViewById<Button>(R.id.saveUrlButton).setOnClickListener { saveIcalUrl() }
-        findViewById<Button>(R.id.syncButton).setOnClickListener { syncNow() }
+            // The website checks for this to know it is inside the app — it must
+            // be readable immediately, before any script we inject could run.
+            userAgentString = "$userAgentString RecallAndroid/1.0"
+        }
+
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
+
+        // Lets the website hand the calendar URL to the native side, so it can
+        // be stored on the phone instead of on our server.
+        web.addJavascriptInterface(Bridge(), "RecallNative")
+
+        web.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest,
+            ): Boolean {
+                val url = request.url.toString()
+
+                // Google blocks its sign-in inside WebViews. Send that one
+                // journey to a Custom Tab, which is a real Chrome window.
+                if (url.contains("accounts.google.com") || url.contains("/auth/v1/authorize")) {
+                    openInCustomTab(url)
+                    return true
+                }
+
+                // Anything genuinely external (Slate links from a deadline
+                // card, for instance) belongs in the browser, not in here.
+                val host = request.url.host ?: return false
+                if (!host.endsWith("vercel.app") && !host.contains("supabase")) {
+                    openInCustomTab(url)
+                    return true
+                }
+
+                return false
+            }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                progress.visibility = View.GONE
+
+                // Signed in — make sure this device can sync.
+                if (url.contains("/dashboard") && deviceToken.isNullOrBlank()) {
+                    claimDeviceToken()
+                }
+
+                // Tell the page it is running inside the app, so it can offer
+                // the native calendar-URL flow instead of the extension one.
+                view.evaluateJavascript(
+                    "window.__RECALL_ANDROID__ = true;" +
+                        "document.documentElement.classList.add('in-recall-app');",
+                    null,
+                )
+            }
+
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                progress.visibility = View.VISIBLE
+            }
+        }
+
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest) = request.deny()
+        }
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (web.canGoBack()) web.goBack() else finish()
+            }
+        })
 
         SyncWorker.schedule(this)
-        render()
+
+        // Open on whatever the site decides: landing page when signed out,
+        // dashboard when signed in.
+        if (savedInstanceState == null) web.loadUrl(Config.RECALL_ORIGIN)
+
+        handleDeepLink(intent)
     }
 
-    private fun isReady() = !deviceToken.isNullOrBlank() && !icalUrl.isNullOrBlank()
-
-    private fun render() {
-        if (isReady()) {
-            setup.visibility = View.GONE
-            web.visibility = View.VISIBLE
-            if (web.url == null) web.loadUrl("${Config.RECALL_ORIGIN}/dashboard")
-        } else {
-            setup.visibility = View.VISIBLE
-            web.visibility = View.GONE
-
-            findViewById<View>(R.id.pairRow).visibility =
-                if (deviceToken.isNullOrBlank()) View.VISIBLE else View.GONE
-            findViewById<View>(R.id.urlRow).visibility =
-                if (deviceToken.isNullOrBlank()) View.GONE else View.VISIBLE
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
     }
 
-    /** Exchanges the code shown on the Recall website for a device token. */
-    private fun pair() {
-        val code = findViewById<EditText>(R.id.codeInput).text.toString().trim()
-        if (code.isEmpty()) {
-            status.text = getString(R.string.enter_code)
-            return
-        }
+    /**
+     * Sign-in finished in the Custom Tab and bounced back to us with a code.
+     *
+     * We hand that code to the WebView rather than exchanging it natively, so
+     * the session cookies land where the app actually needs them.
+     */
+    private fun handleDeepLink(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "recall") return
 
-        status.text = getString(R.string.linking)
+        val code = data.getQueryParameter("code")
+        val error = data.getQueryParameter("error")
 
-        lifecycleScope.launch {
-            try {
-                val token = withContext(Dispatchers.IO) { requestToken(code) }
-                deviceToken = token
-                status.text = getString(R.string.linked)
-                render()
-            } catch (e: Exception) {
-                status.text = e.message ?: getString(R.string.could_not_link)
-            }
+        when {
+            !code.isNullOrBlank() ->
+                web.loadUrl("${Config.RECALL_ORIGIN}/auth/callback?code=$code")
+
+            !error.isNullOrBlank() ->
+                web.loadUrl("${Config.RECALL_ORIGIN}/?error=sign-in-failed")
         }
     }
 
-    private fun requestToken(code: String): String {
-        val conn = (URL("${Config.RECALL_ORIGIN}/api/pair").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            doOutput = true
-            connectTimeout = 20_000
-            readTimeout = 30_000
-        }
-
+    private fun openInCustomTab(url: String) {
         try {
-            val body = JSONObject()
-                .put("code", code)
-                .put("label", "Android phone")
-                .toString()
-
-            conn.outputStream.use { it.write(body.toByteArray()) }
-
-            val ok = conn.responseCode in 200..299
-            val text = (if (ok) conn.inputStream else conn.errorStream)
-                ?.bufferedReader()?.use { it.readText() } ?: ""
-
-            val json = JSONObject(text.ifBlank { "{}" })
-
-            if (!ok) throw Exception(json.optString("error", "That code did not work."))
-
-            return json.optString("token").ifBlank { throw Exception("No token returned.") }
-        } finally {
-            conn.disconnect()
+            CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .setUrlBarHidingEnabled(false)
+                .build()
+                .also { it.intent.putExtra("android.intent.extra.REFERRER", Uri.parse("android-app://$packageName")) }
+                .launchUrl(this, Uri.parse(url))
+        } catch (_: Exception) {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
     }
 
-    private fun saveIcalUrl() {
-        val url = findViewById<EditText>(R.id.urlInput).text.toString().trim()
+    /** Asks the site — from inside the logged-in WebView — for a device token. */
+    private fun claimDeviceToken() {
+        val js = """
+            (async () => {
+              try {
+                const r = await fetch('/api/pair/auto', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ label: 'Android app' })
+                });
+                if (!r.ok) return '';
+                const j = await r.json();
+                return j.token || '';
+              } catch (e) { return ''; }
+            })()
+        """.trimIndent()
 
-        if (!url.startsWith("https://")) {
-            status.text = getString(R.string.url_must_be_https)
-            return
-        }
-
-        icalUrl = url
-        status.text = getString(R.string.saved_syncing)
-        syncNow()
-        render()
-    }
-
-    private fun syncNow() {
-        status.text = getString(R.string.checking_slate)
-
-        SyncWorker.syncNow(this).observe(this) { info ->
-            when (info?.state) {
-                WorkInfo.State.SUCCEEDED -> {
-                    val n = info.outputData.getInt("synced", 0)
-                    status.text = getString(R.string.synced_events, n)
-                    if (web.visibility == View.VISIBLE) web.reload()
-                }
-                WorkInfo.State.FAILED ->
-                    status.text = lastError ?: getString(R.string.sync_failed)
-                else -> Unit
+        web.evaluateJavascript(js) { raw ->
+            val token = raw?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
+            if (token != null) {
+                deviceToken = token
+                // If the calendar URL is already known, start syncing at once.
+                if (!icalUrl.isNullOrBlank()) SyncWorker.syncNow(this)
             }
         }
     }
 
+    /** Exposed to the website as `window.RecallNative`. */
+    inner class Bridge {
 
-    override fun onBackPressed() {
-        if (web.visibility == View.VISIBLE && web.canGoBack()) web.goBack()
-        else @Suppress("DEPRECATION") super.onBackPressed()
+        /** The website calls this so the calendar URL stays on the phone. */
+        @JavascriptInterface
+        fun saveCalendarUrl(url: String) {
+            if (!url.startsWith("https://")) return
+            icalUrl = url
+            lifecycleScope.launch { SyncWorker.syncNow(this@MainActivity) }
+        }
+
+        @JavascriptInterface
+        fun hasCalendarUrl(): Boolean = !icalUrl.isNullOrBlank()
+
+        @JavascriptInterface
+        fun syncNow() {
+            lifecycleScope.launch { SyncWorker.syncNow(this@MainActivity) }
+        }
     }
 }
