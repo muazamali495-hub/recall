@@ -11,7 +11,7 @@ const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 const TEXT_MODELS = (
   process.env.OPENROUTER_TEXT_MODELS ??
-  ["openrouter/free", "google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free"].join(",")
+  ["google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free", "openrouter/free"].join(",")
 )
   .split(",")
   .map((m) => m.trim())
@@ -54,6 +54,14 @@ async function callOne(apiKey: string, body: Body, signal: AbortSignal): Promise
   const text = json?.choices?.[0]?.message?.content;
 
   if (typeof text !== "string" || !text.trim()) throw new Error("Empty reply.");
+
+  // openrouter/free routes to whatever pool is idle, and that pool includes
+  // content-safety classifiers. Their output ("User Safety: safe") is a
+  // verdict, not an answer — reject it so the race falls to a real model.
+  if (/^s*(user|response)s+safetys*:/i.test(text)) {
+    throw new Error("Routed to a classifier, not a chat model.");
+  }
+
   return text;
 }
 
@@ -103,7 +111,7 @@ export async function callModel(prompt: string, maxTokens = 2500): Promise<strin
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new LlmNotConfigured();
 
-  return race(apiKey, TEXT_MODELS.slice(0, 2), (model) => ({
+  return race(apiKey, TEXT_MODELS.slice(0, 3), (model) => ({
     model,
     messages: [{ role: "user", content: prompt }],
     max_tokens: maxTokens,
@@ -117,7 +125,9 @@ export async function callChat(messages: ChatMessage[], maxTokens = 1800): Promi
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new LlmNotConfigured();
 
-  return race(apiKey, TEXT_MODELS.slice(0, 2), (model) => ({
+  // Three, not two: free pools 429 constantly, and text requests are small
+  // enough that the extra concurrent call costs nothing meaningful.
+  return race(apiKey, TEXT_MODELS.slice(0, 3), (model) => ({
     model,
     messages,
     max_tokens: maxTokens,

@@ -29,7 +29,7 @@ const DAYS = [
  */
 const MODEL_CHAIN = (
   process.env.OPENROUTER_MODELS ??
-  ["openrouter/free", "google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free"].join(",")
+  ["google/gemma-4-26b-a4b-it:free", "openrouter/free", "google/gemma-4-31b-it:free"].join(",")
 )
   .split(",")
   .map((m) => m.trim())
