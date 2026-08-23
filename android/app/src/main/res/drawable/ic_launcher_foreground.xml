@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground. The art is drawn inside the 66dp safe zone of
+     the 108dp canvas, so launchers can mask it to any shape without clipping. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="1.55"
+        android:scaleY="1.55"
+        android:translateX="29"
+        android:translateY="29">
+
+        <path
+            android:pathData="M2,12V2"
+            android:strokeWidth="2.6"
+            android:strokeColor="#57E6C1"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M2,7h7"
+            android:strokeWidth="2.6"
+            android:strokeColor="#57E6C1"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M9,2v10"
+            android:strokeWidth="2.6"
+            android:strokeColor="#57E6C1"
+            android:strokeLineCap="round" />
+
+        <path
+            android:pathData="M12.5,7.8l2.2,2.2l4,-4.6"
+            android:strokeWidth="2.6"
+            android:strokeColor="#FFB65C"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

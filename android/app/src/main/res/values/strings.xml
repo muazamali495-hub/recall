@@ -23,4 +23,5 @@
     <string name="checking_slate">Checking Slate…</string>
     <string name="synced_events">Synced %1$d events.</string>
     <string name="sync_failed">Sync failed.</string>
+    <string name="splash_tagline">Your semester, handled.</string>
 </resources>

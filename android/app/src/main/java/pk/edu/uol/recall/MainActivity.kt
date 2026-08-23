@@ -6,33 +6,42 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.*
-import android.widget.ProgressBar
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabsIntent
-import androidx.core.graphics.toColorInt
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import pk.edu.uol.recall.Store.deviceToken
 import pk.edu.uol.recall.Store.icalUrl
 
 /**
- * The whole app: Recall's website, plus the two things a website cannot do.
+ * The whole app: Recall's website, plus the three things a website cannot do
+ * for itself inside a WebView.
  *
- * 1. **Google sign-in.** Google refuses to render its login inside a WebView,
- *    so that one step opens in a Chrome Custom Tab and comes back through a
- *    deep link. Everything else stays in the app.
- *
- * 2. **Fetching Slate.** Handled by SyncWorker in the background.
- *
- * There is no pairing screen. Once the student is signed in, the app quietly
- * mints its own device token — asking someone to copy a code between two
- * halves of the same app would be friction for nothing.
+ * 1. **Google sign-in** — Google refuses to render its login in a WebView, so
+ *    that step goes to a Chrome Custom Tab and returns via a deep link.
+ * 2. **File uploads** — a WebView ignores `<input type="file">` entirely
+ *    unless the host app opens the picker for it. Without this the timetable
+ *    upload silently does nothing.
+ * 3. **Fetching Slate** — handled by SyncWorker in the background.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var web: WebView
-    private lateinit var progress: ProgressBar
+    private lateinit var splash: View
+
+    /** Held between opening the file picker and the result coming back. */
+    private var pendingFiles: ValueCallback<Array<Uri>>? = null
+
+    private val filePicker =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            pendingFiles?.onReceiveValue(
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data),
+            )
+            pendingFiles = null
+        }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,23 +49,61 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         web = findViewById(R.id.web)
-        progress = findViewById(R.id.progress)
+        splash = findViewById(R.id.splash)
 
+        applyInsets()
+        configureWebView()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (web.canGoBack()) web.goBack() else finish()
+            }
+        })
+
+        SyncWorker.schedule(this)
+
+        if (savedInstanceState == null) web.loadUrl(Config.RECALL_ORIGIN)
+        handleDeepLink(intent)
+    }
+
+    /**
+     * Android 15 draws apps edge-to-edge by default, so without this the page
+     * starts underneath the status bar and the header sits too high.
+     */
+    private fun applyInsets() {
+        val root = findViewById<View>(R.id.root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime(),
+            )
+            view.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun configureWebView() {
         with(web.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
             mediaPlaybackRequiresUserGesture = false
 
-            // The website checks for this to know it is inside the app — it must
-            // be readable immediately, before any script we inject could run.
+            // Reuse cached assets between launches instead of refetching the
+            // whole app every time — the single biggest win for perceived speed.
+            cacheMode = WebSettings.LOAD_DEFAULT
+
+            loadsImagesAutomatically = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+
+            // The website checks for this to know it is inside the app; it must
+            // be readable immediately, before any injected script could run.
             userAgentString = "$userAgentString RecallAndroid/1.0"
         }
 
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
-
-        // Lets the website hand the calendar URL to the native side, so it can
-        // be stored on the phone instead of on our server.
+        web.setBackgroundColor(0xFF0A0D15.toInt())
         web.addJavascriptInterface(Bridge(), "RecallNative")
 
         web.webViewClient = object : WebViewClient() {
@@ -66,15 +113,11 @@ class MainActivity : AppCompatActivity() {
             ): Boolean {
                 val url = request.url.toString()
 
-                // Google blocks its sign-in inside WebViews. Send that one
-                // journey to a Custom Tab, which is a real Chrome window.
                 if (url.contains("accounts.google.com") || url.contains("/auth/v1/authorize")) {
                     openInCustomTab(url)
                     return true
                 }
 
-                // Anything genuinely external (Slate links from a deadline
-                // card, for instance) belongs in the browser, not in here.
                 val host = request.url.host ?: return false
                 if (!host.endsWith("vercel.app") && !host.contains("supabase")) {
                     openInCustomTab(url)
@@ -85,44 +128,42 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                progress.visibility = View.GONE
+                splash.visibility = View.GONE
 
-                // Signed in — make sure this device can sync.
-                if (url.contains("/dashboard") && deviceToken.isNullOrBlank()) {
-                    claimDeviceToken()
-                }
+                if (url.contains("/dashboard") && deviceToken.isNullOrBlank()) claimDeviceToken()
 
-                // Tell the page it is running inside the app, so it can offer
-                // the native calendar-URL flow instead of the extension one.
                 view.evaluateJavascript(
                     "window.__RECALL_ANDROID__ = true;" +
                         "document.documentElement.classList.add('in-recall-app');",
                     null,
                 )
             }
-
-            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-                progress.visibility = View.VISIBLE
-            }
         }
 
         web.webChromeClient = object : WebChromeClient() {
+            /**
+             * Without this a WebView ignores every file input on the page — the
+             * timetable upload button appears to work and then does nothing.
+             */
+            override fun onShowFileChooser(
+                webView: WebView,
+                callback: ValueCallback<Array<Uri>>,
+                params: FileChooserParams,
+            ): Boolean {
+                pendingFiles?.onReceiveValue(null) // abandon any earlier request
+                pendingFiles = callback
+
+                return try {
+                    filePicker.launch(params.createIntent())
+                    true
+                } catch (_: Exception) {
+                    pendingFiles = null
+                    false
+                }
+            }
+
             override fun onPermissionRequest(request: PermissionRequest) = request.deny()
         }
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (web.canGoBack()) web.goBack() else finish()
-            }
-        })
-
-        SyncWorker.schedule(this)
-
-        // Open on whatever the site decides: landing page when signed out,
-        // dashboard when signed in.
-        if (savedInstanceState == null) web.loadUrl(Config.RECALL_ORIGIN)
-
-        handleDeepLink(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -132,9 +173,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Sign-in finished in the Custom Tab and bounced back to us with a code.
+     * Sign-in finished in the Custom Tab and came back with a code.
      *
-     * We hand that code to the WebView rather than exchanging it natively, so
+     * The code is replayed into the WebView rather than exchanged natively, so
      * the session cookies land where the app actually needs them.
      */
     private fun handleDeepLink(intent: Intent?) {
@@ -145,9 +186,10 @@ class MainActivity : AppCompatActivity() {
         val error = data.getQueryParameter("error")
 
         when {
-            !code.isNullOrBlank() ->
+            !code.isNullOrBlank() -> {
+                splash.visibility = View.VISIBLE
                 web.loadUrl("${Config.RECALL_ORIGIN}/auth/callback?code=$code")
-
+            }
             !error.isNullOrBlank() ->
                 web.loadUrl("${Config.RECALL_ORIGIN}/?error=sign-in-failed")
         }
@@ -157,16 +199,14 @@ class MainActivity : AppCompatActivity() {
         try {
             CustomTabsIntent.Builder()
                 .setShowTitle(true)
-                .setUrlBarHidingEnabled(false)
                 .build()
-                .also { it.intent.putExtra("android.intent.extra.REFERRER", Uri.parse("android-app://$packageName")) }
                 .launchUrl(this, Uri.parse(url))
         } catch (_: Exception) {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
     }
 
-    /** Asks the site — from inside the logged-in WebView — for a device token. */
+    /** Asks the site — from inside the signed-in WebView — for a device token. */
     private fun claimDeviceToken() {
         val js = """
             (async () => {
@@ -187,7 +227,6 @@ class MainActivity : AppCompatActivity() {
             val token = raw?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
             if (token != null) {
                 deviceToken = token
-                // If the calendar URL is already known, start syncing at once.
                 if (!icalUrl.isNullOrBlank()) SyncWorker.syncNow(this)
             }
         }
@@ -196,12 +235,12 @@ class MainActivity : AppCompatActivity() {
     /** Exposed to the website as `window.RecallNative`. */
     inner class Bridge {
 
-        /** The website calls this so the calendar URL stays on the phone. */
+        /** Keeps the calendar URL on the phone rather than on our server. */
         @JavascriptInterface
         fun saveCalendarUrl(url: String) {
             if (!url.startsWith("https://")) return
             icalUrl = url
-            lifecycleScope.launch { SyncWorker.syncNow(this@MainActivity) }
+            SyncWorker.syncNow(this@MainActivity)
         }
 
         @JavascriptInterface
@@ -209,7 +248,7 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun syncNow() {
-            lifecycleScope.launch { SyncWorker.syncNow(this@MainActivity) }
+            SyncWorker.syncNow(this@MainActivity)
         }
     }
 }
