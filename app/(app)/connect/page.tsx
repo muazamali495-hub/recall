@@ -9,12 +9,24 @@ export default async function ConnectPage() {
 
   if (!user) redirect("/");
 
-  const { data: devices } = await supabase
-    .from("sync_devices")
-    .select("id, label, last_seen_at")
-    .order("created_at", { ascending: false });
+  const [{ data: devices }, { count: deadlineCount }] = await Promise.all([
+    supabase
+      .from("sync_devices")
+      .select("id, label, last_seen_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("deadlines")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+  ]);
 
   const linked = (devices?.length ?? 0) > 0;
+
+  // Syncing is account-level: one device holds the calendar URL and pushes
+  // deadlines in, and every other device reads them. A phone showing "not
+  // connected" because it personally lacks the URL is just wrong.
+  const syncedDevice = (devices ?? []).find((d) => d.last_seen_at) ?? null;
+  const accountConnected = Boolean(syncedDevice) || (deadlineCount ?? 0) > 0;
 
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-6 pb-24 pt-10">
@@ -33,6 +45,10 @@ export default async function ConnectPage() {
       <ConnectSwitch
         alreadyLinked={linked}
         installUrl={process.env.NEXT_PUBLIC_EXTENSION_URL ?? null}
+        accountConnected={accountConnected}
+        syncedFrom={syncedDevice?.label ?? null}
+        lastSyncedAt={syncedDevice?.last_seen_at ?? null}
+        deadlineCount={deadlineCount ?? 0}
       />
 
       {linked && devices && (
