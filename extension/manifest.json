@@ -3,7 +3,11 @@
   "name": "Recall — Slate Sync",
   "version": "0.1.0",
   "description": "Keeps your Slate quiz and assignment deadlines in sync with Recall.",
-  "permissions": ["storage", "alarms", "scripting"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting"
+  ],
   "host_permissions": [
     "https://slate.uol.edu.pk/*",
     "https://recall-kohl-mu.vercel.app/*",
@@ -16,5 +20,17 @@
   "action": {
     "default_title": "Recall",
     "default_popup": "popup.html"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://recall-kohl-mu.vercel.app/*",
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

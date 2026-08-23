@@ -2,21 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { ConnectSwitch } from "./connect-switch";
 
-const STEPS = [
-  {
-    title: "Install the Recall extension",
-    detail: "It runs in your browser and checks Slate for you.",
-  },
-  {
-    title: "Generate a pairing code below",
-    detail: "Type it into the extension once to link it to your account.",
-  },
-  {
-    title: "Paste your Slate calendar link into the extension",
-    detail: "Slate → Calendar → Export calendar → Get calendar URL.",
-  },
-];
-
 export default async function ConnectPage() {
   const supabase = await createClient();
 
@@ -32,9 +17,13 @@ export default async function ConnectPage() {
   const linked = (devices?.length ?? 0) > 0;
 
   return (
-    <main className="mx-auto w-full max-w-xl flex-1 px-6 py-14">
-
-      <h1 className="mb-3 text-2xl font-bold tracking-tight">Connect Slate</h1>
+    <main className="mx-auto w-full max-w-xl flex-1 px-6 pb-24 pt-10">
+      <p className="mb-2.5 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-mint">
+        Slate
+      </p>
+      <h1 className="mb-3 text-[2rem] font-bold leading-none tracking-tight sm:text-[2.4rem]">
+        Connect once, then forget it.
+      </h1>
       <p className="mb-8 text-sm text-muted">
         Slate only accepts requests from a real browser, so Recall checks it
         through a small extension running in yours. Your calendar link stays on
@@ -43,21 +32,7 @@ export default async function ConnectPage() {
 
       <ConnectSwitch
         alreadyLinked={linked}
-        steps={
-          <ol className="mb-8 flex flex-col gap-3">
-        {STEPS.map((step, i) => (
-          <li key={i} className="flex gap-3 rounded-xl border border-line bg-white/[0.02] p-4">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-mint/25 bg-mint/10 text-xs font-bold text-mint">
-              {i + 1}
-            </span>
-            <span>
-              <span className="block text-sm font-medium">{step.title}</span>
-              <span className="block text-xs text-faint">{step.detail}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-        }
+        installUrl={process.env.NEXT_PUBLIC_EXTENSION_URL ?? null}
       />
 
       {linked && devices && (

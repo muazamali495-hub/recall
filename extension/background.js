@@ -49,11 +49,40 @@ async function checkReminders() {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "SYNC_NOW") {
-    syncNow()
-      .then((result) => sendResponse({ ok: true, ...result }))
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
-    return true; // keep the channel open for the async reply
+  switch (message?.type) {
+    case "SYNC_NOW":
+      syncNow()
+        .then((result) => sendResponse({ ok: true, ...result }))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true; // keep the channel open for the async reply
+
+    // The website mints a device token once the student is signed in and
+    // hands it over, so nobody has to copy a pairing code by hand.
+    case "SET_TOKEN":
+      chrome.storage.local.set({ deviceToken: message.token }).then(() =>
+        sendResponse({ ok: true }),
+      );
+      return true;
+
+    // Stored locally on purpose: Recall's server never receives this URL,
+    // only the calendar contents it returns.
+    case "SET_ICAL_URL":
+      chrome.storage.local
+        .set({ icalUrl: message.url })
+        .then(() => syncNow())
+        .then((result) => sendResponse({ ok: true, ...result }))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+
+    case "GET_STATE":
+      chrome.storage.local.get(["deviceToken", "icalUrl", "status"]).then((s) =>
+        sendResponse({
+          paired: Boolean(s.deviceToken),
+          hasCalendarUrl: Boolean(s.icalUrl),
+          status: s.status ?? null,
+        }),
+      );
+      return true;
   }
 });
 
