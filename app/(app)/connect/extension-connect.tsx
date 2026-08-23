@@ -4,6 +4,51 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const TAG = "recall-extension";
 
+/**
+ * Copies `chrome://extensions` to the clipboard.
+ *
+ * It cannot be a link. Chrome refuses to navigate to chrome:// URLs from web
+ * content — the click is silently ignored, which reads as a broken button.
+ * Copy-and-paste is the closest thing to one click that the browser allows.
+ */
+function CopyChromeExtensions() {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText("chrome://extensions");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard needs a secure context and permission; if it is refused the
+      // address is still on screen to type.
+      setCopied(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy, then paste into a new tab"
+      className="inline-flex items-center gap-1.5 rounded-md border border-mint/25 bg-mint/10 px-2 py-0.5 align-baseline font-mono text-xs text-mint transition hover:bg-mint/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+    >
+      chrome://extensions
+      {copied ? (
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 8.5l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M10.5 5.5v-1a1.5 1.5 0 00-1.5-1.5H4a1.5 1.5 0 00-1.5 1.5v5A1.5 1.5 0 004 11h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )}
+      <span className="sr-only">{copied ? "Copied" : "Copy address"}</span>
+    </button>
+  );
+}
+
 type ExtState = { paired: boolean; hasCalendarUrl: boolean; status?: { ok: boolean; message: string } | null };
 
 type Phase =
@@ -192,11 +237,8 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
               {[
                 <>Unzip the file you just downloaded</>,
                 <>
-                  Open{" "}
-                  <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-xs text-mint">
-                    chrome://extensions
-                  </code>{" "}
-                  and turn on <strong className="text-ink">Developer mode</strong> (top right)
+                  Open <CopyChromeExtensions /> in a new tab, then turn on{" "}
+                  <strong className="text-ink">Developer mode</strong> (top right)
                 </>,
                 <>
                   Click <strong className="text-ink">Load unpacked</strong> and pick the unzipped
@@ -214,9 +256,9 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
             </ol>
 
             <p className="mt-3 text-xs text-faint">
-              Chrome won&apos;t let a website open{" "}
-              <code className="font-mono">chrome://extensions</code> for you — that address has to
-              be typed. Everything after it is automatic.
+              Chrome blocks websites from opening{" "}
+              <code className="font-mono">chrome://</code> pages, so that one has to be pasted —
+              tap it above to copy. Everything after it is automatic.
             </p>
           </>
         )}
