@@ -110,6 +110,20 @@ export async function callModel(prompt: string, maxTokens = 2500): Promise<strin
   }));
 }
 
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+/** Multi-turn conversation → model reply. Used by Ask Recall. */
+export async function callChat(messages: ChatMessage[], maxTokens = 1800): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new LlmNotConfigured();
+
+  return race(apiKey, TEXT_MODELS.slice(0, 2), (model) => ({
+    model,
+    messages,
+    max_tokens: maxTokens,
+  }));
+}
+
 /** Prompt plus images → model reply. Used by the timetable reader. */
 export async function callVisionModel(
   prompt: string,

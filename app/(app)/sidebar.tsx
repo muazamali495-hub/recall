@@ -56,7 +56,6 @@ const ITEMS: Item[] = [
   {
     href: "/ask",
     label: "Ask Recall",
-    soon: true,
     icon: (
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <path d="M17 12.5a2.5 2.5 0 01-2.5 2.5H7l-4 3V5.5A2.5 2.5 0 015.5 3h9A2.5 2.5 0 0117 5.5z" stroke="currentColor" {...stroke} />
