@@ -100,6 +100,25 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
     window.addEventListener("message", onMessage);
     send({ type: "PING" });
 
+    // A content script is only injected into pages loaded AFTER the extension
+    // is installed, so this tab cannot notice a fresh install on its own. When
+    // the student comes back from chrome://extensions, reload once so the
+    // script lands and the page links itself.
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      if (sessionStorage.getItem("recall-reload-checked")) return;
+
+      setPhase((p) => {
+        if (p === "missing") {
+          sessionStorage.setItem("recall-reload-checked", "1");
+          window.location.reload();
+        }
+        return p;
+      });
+    }
+
+    document.addEventListener("visibilitychange", onVisible);
+
     // No answer means the extension isn't there. Content scripts run at
     // document_idle, so give it a moment before saying so.
     const timer = setTimeout(() => {
@@ -108,6 +127,7 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
 
     return () => {
       window.removeEventListener("message", onMessage);
+      document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(timer);
     };
   }, [link, send]);
@@ -156,25 +176,55 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
             </svg>
           </a>
         ) : (
-          <ol className="flex flex-col gap-2 text-sm text-muted">
-            {[
-              "Download the extension folder from GitHub",
-              "Open chrome://extensions and turn on Developer mode",
-              "Click Load unpacked and choose the extension folder",
-              "Come back here — this page links it on its own",
-            ].map((step, i) => (
-              <li key={i} className="flex gap-3 rounded-xl border border-line bg-white/[0.02] p-3">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-mint/25 bg-mint/10 text-[0.65rem] font-bold text-mint">
-                  {i + 1}
-                </span>
-                {step}
-              </li>
-            ))}
-          </ol>
+          <>
+            <a
+              href="/recall-extension.zip"
+              download
+              className="mb-5 inline-flex items-center gap-2 rounded-xl bg-mint px-5 py-3 font-semibold text-[#04231d] transition hover:-translate-y-0.5"
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5M4 15v1.5A1.5 1.5 0 005.5 18h9a1.5 1.5 0 001.5-1.5V15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Download the extension
+            </a>
+
+            <ol className="flex flex-col gap-2 text-sm text-muted">
+              {[
+                <>Unzip the file you just downloaded</>,
+                <>
+                  Open{" "}
+                  <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-xs text-mint">
+                    chrome://extensions
+                  </code>{" "}
+                  and turn on <strong className="text-ink">Developer mode</strong> (top right)
+                </>,
+                <>
+                  Click <strong className="text-ink">Load unpacked</strong> and pick the unzipped
+                  folder
+                </>,
+                <>Switch back to this tab — it links itself</>,
+              ].map((step, i) => (
+                <li key={i} className="flex gap-3 rounded-xl border border-line bg-white/[0.02] p-3">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-mint/25 bg-mint/10 text-[0.65rem] font-bold text-mint">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            <p className="mt-3 text-xs text-faint">
+              Chrome won&apos;t let a website open{" "}
+              <code className="font-mono">chrome://extensions</code> for you — that address has to
+              be typed. Everything after it is automatic.
+            </p>
+          </>
         )}
 
         <p className="mt-4 text-xs text-faint">
-          {phase === "looking" ? "Checking for the extension…" : "Not detected yet — this page will notice the moment it appears."}
+          {phase === "looking"
+            ? "Checking for the extension…"
+            : "Not detected yet — this page reloads and links itself as soon as you come back."}
         </p>
       </div>
     );
