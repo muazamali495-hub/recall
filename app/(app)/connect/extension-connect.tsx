@@ -275,11 +275,27 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
           </>
         )}
 
-        <p className="mt-4 text-xs text-faint">
-          {phase === "looking"
-            ? "Checking for the extension…"
-            : "Not detected yet — this page reloads and links itself as soon as you come back."}
-        </p>
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="mb-3 text-xs text-faint">
+            {phase === "looking"
+              ? "Checking for the extension…"
+              : "Not detected yet. A content script only loads into pages opened after the extension was installed, so this tab may simply predate it."}
+          </p>
+
+          {phase === "missing" && (
+            <button
+              onClick={() => {
+                // The one-shot reload guard can leave this stuck showing the
+                // install card after a genuine install, so clear it first.
+                sessionStorage.removeItem("recall-reload-checked");
+                window.location.reload();
+              }}
+              className="rounded-xl border border-line-2 px-4 py-2 text-sm font-medium text-muted transition hover:bg-white/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+            >
+              I&apos;ve installed it — check again
+            </button>
+          )}
+        </div>
       </div>
     );
   }
