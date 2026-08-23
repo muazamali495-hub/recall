@@ -235,14 +235,26 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
 
             <ol className="flex flex-col gap-2 text-sm text-muted">
               {[
-                <>Unzip the file you just downloaded</>,
+                <>
+                  <strong className="text-ink">Right-click the downloaded zip → Extract All.</strong>{" "}
+                  Windows shows a zip as if it were already a folder — it isn&apos;t, and Chrome
+                  can&apos;t read inside one. You should end up with a real{" "}
+                  <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-xs text-mint">
+                    recall-extension
+                  </code>{" "}
+                  folder.
+                </>,
                 <>
                   Open <CopyChromeExtensions /> in a new tab, then turn on{" "}
                   <strong className="text-ink">Developer mode</strong> (top right)
                 </>,
                 <>
-                  Click <strong className="text-ink">Load unpacked</strong> and pick the unzipped
-                  folder
+                  Click <strong className="text-ink">Load unpacked</strong> and select the{" "}
+                  <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-xs text-mint">
+                    recall-extension
+                  </code>{" "}
+                  folder itself — not a file inside it. The picker looks empty because it only shows
+                  folders; that&apos;s normal.
                 </>,
                 <>Switch back to this tab — it links itself</>,
               ].map((step, i) => (
