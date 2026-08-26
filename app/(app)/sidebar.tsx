@@ -192,6 +192,18 @@ export function Sidebar({ name, email }: { name: string | null; email: string })
               Sign out
             </button>
           </form>
+
+          <p className="mt-3 px-1 text-center text-[0.65rem] text-faint/70">
+            Made by{" "}
+            <a
+              href="https://github.com/muazamali495-hub"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium transition hover:text-mint"
+            >
+              Muazzam Ali
+            </a>
+          </p>
         </div>
       </aside>
     </>

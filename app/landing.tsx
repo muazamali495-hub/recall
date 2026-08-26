@@ -468,7 +468,16 @@ export function Landing() {
             <span>Recall</span>
           </div>
           <span>
-            Built by a UOL student, for UOL students · <span className={s.tnum}>2026</span>
+            Made by{" "}
+            <a
+              href="https://github.com/muazamali495-hub"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={s.author}
+            >
+              Muazzam Ali
+            </a>{" "}
+            — a UOL student, for UOL students · <span className={s.tnum}>2026</span>
           </span>
         </div>
       </footer>

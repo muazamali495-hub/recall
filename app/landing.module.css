@@ -311,3 +311,16 @@
 @media (prefers-reduced-motion: reduce) {
   .deck { animation: none; transform: rotateX(4deg) rotateY(-6deg); }
 }
+
+/* Author credit in the footer — quiet by default, mint on hover, so it reads
+   as a signature rather than a call to action. */
+.author {
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  transition: color 0.18s, border-color 0.18s;
+}
+.author:hover {
+  color: var(--mint);
+  border-bottom-color: var(--mint);
+}

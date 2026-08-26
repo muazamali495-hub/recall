@@ -58,7 +58,7 @@ async function callOne(apiKey: string, body: Body, signal: AbortSignal): Promise
   // openrouter/free routes to whatever pool is idle, and that pool includes
   // content-safety classifiers. Their output ("User Safety: safe") is a
   // verdict, not an answer — reject it so the race falls to a real model.
-  if (/^s*(user|response)s+safetys*:/i.test(text)) {
+  if (/^\s*(user|response)\s+safety\s*:/i.test(text)) {
     throw new Error("Routed to a classifier, not a chat model.");
   }
 

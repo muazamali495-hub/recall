@@ -177,4 +177,5 @@ Not done yet: general AI help, exam-prep flows, multi-university support.
 
 ---
 
-Built by a UOL student, for UOL students.
+**Made by [Muazzam Ali](https://github.com/muazamali495-hub)** — a University of Lahore student,
+for University of Lahore students.
