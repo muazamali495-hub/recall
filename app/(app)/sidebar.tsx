@@ -66,11 +66,8 @@ const ITEMS: Item[] = [
 
 const Brand = () => (
   <Link href="/dashboard" className="flex items-center gap-2.5 px-2 font-bold tracking-tight">
-    <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <rect x="1.5" y="1.5" width="29" height="29" rx="9" fill="#0E1424" stroke="#57E6C1" strokeOpacity=".5" />
-      <path d="M9 21V11M9 16h7M16 11v10" stroke="#57E6C1" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M19.5 16.8l2.2 2.2 4-4.6" stroke="#FFB65C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size brand mark */}
+    <img src="/logo.png" alt="" width={26} height={26} className="rounded-[22%]" aria-hidden="true" />
     Recall
   </Link>
 );

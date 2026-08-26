@@ -24,7 +24,7 @@
             android:layout_width="72dp"
             android:layout_height="72dp"
             android:contentDescription="@string/app_name"
-            android:src="@drawable/ic_recall_mark" />
+            android:src="@mipmap/ic_launcher" />
 
         <TextView
             android:layout_width="wrap_content"

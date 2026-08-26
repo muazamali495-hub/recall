@@ -45,14 +45,24 @@ function crc32(buf) {
   return (c ^ -1) >>> 0;
 }
 
-const files = readdirSync(sourceDir).filter((n) => statSync(join(sourceDir, n)).isFile());
+// Walk subdirectories too: the icons live in extension/icons/, and a
+// top-level-only listing shipped a zip Chrome refused to load.
+function walk(dir, prefix = "") {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    const rel = prefix ? `${prefix}/${name}` : name;
+    return statSync(full).isDirectory() ? walk(full, rel) : [rel];
+  });
+}
+
+const files = walk(sourceDir);
 
 const locals = [];
 const central = [];
 let offset = 0;
 
 for (const name of files) {
-  const raw = readFileSync(join(sourceDir, name));
+  const raw = readFileSync(join(sourceDir, ...name.split("/")));
   const compressed = deflateRawSync(raw);
   const nameBytes = Buffer.from(PREFIX + name, "utf8"); // forward slash, always
   const sum = crc32(raw);

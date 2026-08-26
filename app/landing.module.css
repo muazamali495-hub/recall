@@ -333,3 +333,11 @@
 @media (max-width: 560px) {
   .byline { display: none; }
 }
+
+/* Brand mark. The logo is a rounded badge already, so it only needs a matching
+   radius clip and a little lift to sit against the dark nav. */
+.mark {
+  border-radius: 22%;
+  flex: 0 0 auto;
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+}

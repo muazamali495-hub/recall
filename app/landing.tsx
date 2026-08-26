@@ -5,11 +5,17 @@ import { SignInButton } from "./sign-in-button";
 import s from "./landing.module.css";
 
 const Mark = ({ size = 30 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-    <rect x="1.5" y="1.5" width="29" height="29" rx="9" fill="#0E1424" stroke="#57E6C1" strokeOpacity=".5" />
-    <path d="M9 21V11M9 16h7M16 11v10" stroke="#57E6C1" strokeWidth="2.2" strokeLinecap="round" />
-    <path d="M19.5 16.8l2.2 2.2 4-4.6" stroke="#FFB65C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+  // eslint-disable-next-line @next/next/no-img-element -- fixed-size brand mark,
+  // no layout shift to optimise away, and next/image adds a wrapper the flex
+  // brand row does not want.
+  <img
+    src="/logo.png"
+    alt=""
+    width={size}
+    height={size}
+    className={s.mark}
+    aria-hidden="true"
+  />
 );
 
 const Arrow = () => (
