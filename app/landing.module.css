@@ -324,3 +324,12 @@
   color: var(--mint);
   border-bottom-color: var(--mint);
 }
+
+/* Author byline in the nav. Dropped below 560px, where the brand and the
+   CTA button already compete for the row. */
+.byline {
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .byline { display: none; }
+}
