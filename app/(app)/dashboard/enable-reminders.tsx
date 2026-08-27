@@ -23,6 +23,7 @@ export function EnableReminders({
   const [status, setStatus] = useState<Status>("checking");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<number | null>(null);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -37,13 +38,29 @@ export function EnableReminders({
     navigator.serviceWorker
       .getRegistration()
       .then((reg) => reg?.pushManager.getSubscription())
-      .then((sub) => {
-        // Both halves have to agree. A browser hands out one subscription per
-        // installed app regardless of who is signed in, so on a shared phone
-        // this account can hold a browser subscription that the server has
-        // filed under someone else. Trusting the browser alone showed
-        // "reminders on" while nothing was ever delivered.
-        setStatus(sub && subscribedOnServer ? "on" : "off");
+      .then(async (sub) => {
+        if (!sub) {
+          setStatus("off");
+          return;
+        }
+
+        // Re-register this device's endpoint every time.
+        //
+        // "Does this user have a subscription?" was the wrong question: with a
+        // laptop and a phone on one account, the server can hold the phone's
+        // endpoint while the laptop shows "reminders on" and never receives
+        // anything. Re-sending is idempotent and guarantees the device you are
+        // actually looking at is registered.
+        try {
+          const res = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sub.toJSON()),
+          });
+          setStatus(res.ok ? "on" : "off");
+        } catch {
+          setStatus(subscribedOnServer ? "on" : "off");
+        }
       })
       .catch(() => setStatus("off"));
   }, [subscribedOnServer]);
@@ -86,10 +103,16 @@ export function EnableReminders({
   async function sendTest() {
     setBusy(true);
     setError(null);
+    setSentTo(null);
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not send.");
+
+      // Saying how many devices it reached matters: a push that succeeds but
+      // lands on a phone you are not holding looks identical to one that
+      // failed.
+      setSentTo(data.sent ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send.");
     } finally {
@@ -114,6 +137,14 @@ export function EnableReminders({
         >
           {busy ? "Sending…" : "Send a test"}
         </button>
+        {sentTo !== null && !error && (
+          <p className="w-full text-xs text-mint">
+            {sentTo > 0
+              ? `Sent to ${sentTo} device${sentTo === 1 ? "" : "s"}. If nothing appeared, check the notification settings for this browser.`
+              : "Nothing to send to — turn reminders on again."}
+          </p>
+        )}
+
         {error && (
           <p role="alert" className="w-full text-xs text-amber">
             {error}
