@@ -65,7 +65,7 @@ export default async function Dashboard() {
   const pakistanNow = new Date(Date.now() + PKT_OFFSET_MS);
   const todayIndex = pakistanNow.getUTCDay();
 
-  const [{ data: profile }, { data: device }, { data: deadlines }, { data: todayClasses }] =
+  const [{ data: profile }, { data: device }, { data: deadlines }, { data: todayClasses }, { count: pushCount }] =
     await Promise.all([
       supabase.from("profiles").select("full_name").eq("id", user.id).single(),
       supabase.from("sync_devices").select("id").eq("user_id", user.id).maybeSingle(),
@@ -80,6 +80,10 @@ export default async function Dashboard() {
         .select("id, course, start_time, end_time, room")
         .eq("day_of_week", todayIndex)
         .order("start_time", { ascending: true }),
+      supabase
+        .from("push_subscriptions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id),
     ]);
 
   const firstName = profile?.full_name?.split(" ")[0];
@@ -159,7 +163,10 @@ export default async function Dashboard() {
         />
 
         {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && (
-          <EnableReminders vapidKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+          <EnableReminders
+            vapidKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+            subscribedOnServer={(pushCount ?? 0) > 0}
+          />
         )}
 
         {/* ---------------- Everything else ---------------- */}

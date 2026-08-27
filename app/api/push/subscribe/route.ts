@@ -28,11 +28,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Incomplete subscription." }, { status: 400 });
   }
 
-  // Re-subscribing on the same device reuses the endpoint, so upsert.
-  const { error } = await supabase.from("push_subscriptions").upsert(
-    { user_id: user.id, endpoint, p256dh: keys.p256dh, auth: keys.auth },
-    { onConflict: "endpoint" },
-  );
+  // A browser hands out one subscription per installed app, whoever is signed
+  // in. So on a shared phone this endpoint may already belong to another
+  // account — claiming it reassigns it rather than failing the unique
+  // constraint and leaving this account silently unsubscribed.
+  const { error } = await supabase.rpc("claim_push_subscription", {
+    p_endpoint: endpoint,
+    p_p256dh: keys.p256dh,
+    p_auth: keys.auth,
+  });
 
   if (error) return NextResponse.json({ error: "Could not save." }, { status: 500 });
 

@@ -13,7 +13,13 @@ function toUint8Array(base64: string) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
-export function EnableReminders({ vapidKey }: { vapidKey: string }) {
+export function EnableReminders({
+  vapidKey,
+  subscribedOnServer,
+}: {
+  vapidKey: string;
+  subscribedOnServer: boolean;
+}) {
   const [status, setStatus] = useState<Status>("checking");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +37,16 @@ export function EnableReminders({ vapidKey }: { vapidKey: string }) {
     navigator.serviceWorker
       .getRegistration()
       .then((reg) => reg?.pushManager.getSubscription())
-      .then((sub) => setStatus(sub ? "on" : "off"))
+      .then((sub) => {
+        // Both halves have to agree. A browser hands out one subscription per
+        // installed app regardless of who is signed in, so on a shared phone
+        // this account can hold a browser subscription that the server has
+        // filed under someone else. Trusting the browser alone showed
+        // "reminders on" while nothing was ever delivered.
+        setStatus(sub && subscribedOnServer ? "on" : "off");
+      })
       .catch(() => setStatus("off"));
-  }, []);
+  }, [subscribedOnServer]);
 
   async function enable() {
     setBusy(true);
