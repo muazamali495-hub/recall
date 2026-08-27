@@ -1,3 +1,7 @@
+// The planner calls a free model, which can take far longer than the
+// default 10s function timeout.
+export const maxDuration = 60;
+
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { PlannerForm, type DeadlineOption } from "./planner-form";

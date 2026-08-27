@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractTimetable, LlmNotConfigured, type ExtractedClass } from "@/lib/vision";
-import { renderPdfPages } from "@/lib/pdf";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
@@ -49,10 +48,18 @@ export async function extractTimetableAction(
 
   try {
     // A PDF grid has to be seen, not read — its text layer has no times in it.
-    const images =
-      file.type === "application/pdf"
-        ? await renderPdfPages(bytes)
-        : [bytes.toString("base64")];
+    //
+    // Loaded only when a PDF actually arrives: pdfjs needs a canvas backend and
+    // throws on import if it cannot find one, which previously broke image
+    // uploads as collateral damage.
+    let images: string[];
+
+    if (file.type === "application/pdf") {
+      const { renderPdfPages } = await import("@/lib/pdf");
+      images = await renderPdfPages(bytes);
+    } else {
+      images = [bytes.toString("base64")];
+    }
 
     if (images.length === 0) {
       return { error: "That PDF appears to be empty.", section };

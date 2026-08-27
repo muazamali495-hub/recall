@@ -1,3 +1,6 @@
+// Ask Recall waits on a free model; the default 10s timeout is not enough.
+export const maxDuration = 60;
+
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { AskChat } from "./ask-chat";

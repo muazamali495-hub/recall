@@ -1,3 +1,7 @@
+// Reading a timetable takes 20-50s on free models. Vercel defaults to a 10s
+// function timeout, which would kill it regardless of anything else.
+export const maxDuration = 60;
+
 import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { TimetableUpload } from "./timetable-upload";

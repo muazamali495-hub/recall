@@ -18,6 +18,7 @@
     "set:domain": "node scripts/set-domain.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.62.0",
     "ical.js": "^2.2.1",
