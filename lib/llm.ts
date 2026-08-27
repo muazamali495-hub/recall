@@ -144,7 +144,9 @@ export async function callVisionModel(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new LlmNotConfigured();
 
-  return race(apiKey, models.slice(0, 2), (model) => ({
+  // Three, not two. Free vision pools 429 constantly — losing two of them at
+  // once left the feature dead, which is exactly what happened in production.
+  return race(apiKey, models.slice(0, 3), (model) => ({
     model,
     messages: [
       {

@@ -29,7 +29,16 @@ const DAYS = [
  */
 const MODEL_CHAIN = (
   process.env.OPENROUTER_MODELS ??
-  ["google/gemma-4-26b-a4b-it:free", "openrouter/free", "google/gemma-4-31b-it:free"].join(",")
+  [
+    // Tested against a real UOL timetable: minimax returned well-formed JSON
+    // with 9 classes in 7 seconds. Of the other free vision pools available at
+    // the time, dots, nemotron and the auto-router all returned empty content
+    // on the same image, and both gemma pools were 429.
+    "minimax/minimax-m3:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "openrouter/free",
+    "google/gemma-4-31b-it:free",
+  ].join(",")
 )
   .split(",")
   .map((m) => m.trim())
