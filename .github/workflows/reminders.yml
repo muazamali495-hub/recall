@@ -56,9 +56,11 @@ jobs:
           pings=0
 
           while :; do
+            # 75s, not 60: the route's own budget is 60 and a cold start adds
+            # to it, so a tighter timeout would report a failure that isn't one.
             response=$(curl -sS -w '\n%{http_code}' -X POST \
               -H "Authorization: Bearer $CRON_SECRET" \
-              --max-time 60 \
+              --max-time 75 \
               "$RECALL_URL/api/cron/reminders" || echo $'\n000')
 
             body=$(echo "$response" | head -n -1)
@@ -79,8 +81,17 @@ jobs:
               failures=0
             fi
 
-            [ "$ONCE" = "true" ] && break
-            [ "$(date +%s)" -ge "$DEADLINE" ] && break
+            # Spelled out rather than `[ ... ] && break`: GitHub runs these
+            # steps under `set -e`, where a bare failing test at the end of a
+            # loop body is a trap worth not setting.
+            if [ "$ONCE" = "true" ]; then
+              break
+            fi
+
+            if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+              break
+            fi
+
             sleep 180
           done
 
