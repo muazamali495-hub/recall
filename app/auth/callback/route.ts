@@ -24,9 +24,19 @@ export async function GET(request: Request) {
   const next = safeNextPath(searchParams.get("next"));
 
   // Where to send them, honouring the proxy host in production.
+  //
+  // x-forwarded-host is client-supplied in principle. Vercel overwrites it at
+  // the edge so it cannot be spoofed as deployed, but "our host happens to be
+  // sanitised by someone else's infrastructure" is not a property worth
+  // relying on — behind a different proxy this becomes the redirect
+  // vulnerability the `next` parameter used to be. So it has to look like a
+  // bare hostname: no scheme, no userinfo, no path, no port trickery.
   const forwardedHost = request.headers.get("x-forwarded-host");
   const isLocalEnv = process.env.NODE_ENV === "development";
-  const base = isLocalEnv ? origin : forwardedHost ? `https://${forwardedHost}` : origin;
+  const trustedHost =
+    forwardedHost && /^[a-z0-9.-]+(:\d{1,5})?$/i.test(forwardedHost) ? forwardedHost : null;
+
+  const base = isLocalEnv ? origin : trustedHost ? `https://${trustedHost}` : origin;
 
   if (!code) return NextResponse.redirect(`${base}/?error=sign-in-failed`);
 

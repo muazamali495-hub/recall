@@ -3,62 +3,29 @@ import type { NextConfig } from "next";
 /**
  * Response hardening.
  *
- * Vercel supplies HSTS and nothing else, which left the app framable by any
- * site — a real problem here because a single click inside Recall can sign you
- * out or delete your account, and those are exactly the clicks a clickjacking
- * overlay steals.
+ * The Content-Security-Policy is deliberately NOT here — it carries a
+ * per-request nonce, so it is built in proxy.ts instead. Setting it in both
+ * places would be worse than setting it in one: browsers enforce every CSP
+ * header they receive, so the effective policy becomes the intersection, and
+ * the static copy would forbid the nonced scripts the other copy allows.
  *
- * The CSP is deliberately modest rather than aspirational. `script-src` has to
- * allow inline until the app moves to nonces — Next injects its own bootstrap
- * scripts — so the directives that carry the real weight here are the other
- * ones: nothing may frame the page, nothing may be an <object>, forms can only
- * post to us, and <base> cannot be rewritten to point relative URLs elsewhere.
+ * What remains are the headers that are the same on every response. Vercel
+ * supplies HSTS; none of these were present before.
  */
-// `next dev` needs two things production does not: eval(), which React uses in
-// development to rebuild stack traces, and a WebSocket for hot reload. React
-// states plainly that it never calls eval() in production, so relaxing these
-// for the dev server costs the deployed app nothing — and applying the strict
-// policy everywhere would just mean turning it off the first time it bit.
-const isDev = process.env.NODE_ENV === "development";
-
-const CONNECT_SRC = [
-  "'self'",
-  // Supabase: auth, database, realtime. Named by pattern rather than the exact
-  // project so this file does not need editing when the project ref changes.
-  "https://*.supabase.co",
-  "wss://*.supabase.co",
-  ...(isDev ? ["ws://localhost:*", "http://localhost:*"] : []),
-].join(" ");
-
-const SCRIPT_SRC = ["'self'", "'unsafe-inline'", ...(isDev ? ["'unsafe-eval'"] : [])].join(" ");
-
-const CSP = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "img-src 'self' data: blob:",
-  "style-src 'self' 'unsafe-inline'",
-  `script-src ${SCRIPT_SRC}`,
-  `connect-src ${CONNECT_SRC}`,
-  "font-src 'self' data:",
-  "worker-src 'self'",
-  "manifest-src 'self'",
-].join("; ");
-
 const SECURITY_HEADERS = [
-  { key: "Content-Security-Policy", value: CSP },
-  // frame-ancestors covers modern browsers; this covers the rest.
+  // frame-ancestors in the CSP covers modern browsers; this covers the rest.
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
-  // Slate calendar URLs and pairing codes can appear in a path; don't leak
+  // Pairing codes and Slate calendar links can appear in a URL. Don't hand
   // them to third parties in a Referer header.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
   },
+  // Recall is not a search result and has no business being one; more to the
+  // point, signed-in pages must never be indexed.
+  { key: "X-Robots-Tag", value: "noindex" },
 ];
 
 const nextConfig: NextConfig = {
@@ -69,17 +36,20 @@ const nextConfig: NextConfig = {
    */
   serverExternalPackages: ["pdf-to-img", "pdfjs-dist", "@napi-rs/canvas"],
 
+  // The default advertises the exact framework and version to anyone probing.
+  poweredByHeader: false,
+
   async headers() {
     return [
-      { source: "/:path*", headers: SECURITY_HEADERS },
       {
-        // The extension posts here from its own origin, so these routes opt
-        // out of same-origin form/connect assumptions on purpose. They are
-        // authenticated by a bearer device token rather than by a cookie,
-        // which is what makes a wildcard CORS origin safe: there is no
-        // ambient credential for another site to ride on.
-        source: "/api/:path*",
-        headers: [{ key: "X-Content-Type-Options", value: "nosniff" }],
+        // Everything except the landing page, which SHOULD be indexable —
+        // it is how students find Recall in the first place.
+        source: "/((?!$).*)",
+        headers: SECURITY_HEADERS,
+      },
+      {
+        source: "/",
+        headers: SECURITY_HEADERS.filter((h) => h.key !== "X-Robots-Tag"),
       },
     ];
   },
