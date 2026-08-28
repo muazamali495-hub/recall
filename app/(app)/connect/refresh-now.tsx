@@ -157,14 +157,16 @@ export function RefreshNow({
         with the new download, keeping the same location, then reload. Same location matters —
         a new folder is a new extension to Chrome, and you&apos;d have to link it again.
       </p>
-      {installUrl && (
-        <a
-          href={installUrl}
-          className="mt-2.5 inline-block rounded-lg border border-amber/30 px-3 py-1.5 text-xs font-medium text-amber transition hover:bg-amber/10"
-        >
-          Download {latestVersion}
-        </a>
-      )}
+      {/* NEXT_PUBLIC_EXTENSION_URL points at the Web Store listing once there
+          is one. Until then the packaged zip is the download, same fallback
+          the first-run flow uses — an update notice with no way to update
+          would be worse than no notice. */}
+      <a
+        href={installUrl ?? "/recall-extension.zip"}
+        className="mt-2.5 inline-block rounded-lg border border-amber/30 px-3 py-1.5 text-xs font-medium text-amber transition hover:bg-amber/10"
+      >
+        Download {latestVersion}
+      </a>
     </div>
   ) : null;
 
