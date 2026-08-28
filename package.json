@@ -24,6 +24,7 @@
     "test:ask": "node --import ./scripts/register.mjs --env-file=.env.local scripts/test-ask.ts",
     "check:models": "node scripts/check-text-models.mjs",
     "check:vision": "node scripts/check-vision.mjs",
+    "verify:key": "node scripts/verify-openrouter.mjs",
     "icons": "node scripts/make-pwa-icons.mjs",
     "db:login": "supabase login",
     "db:link": "supabase link",
