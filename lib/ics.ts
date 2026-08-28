@@ -11,12 +11,15 @@ export type ParsedDeadline = {
   source_url: string | null;
 };
 
+/** Slate is the only host a calendar link may point at. See validateIcsUrl. */
+const SLATE_HOST = "slate.uol.edu.pk";
+
 /**
- * Blocks obviously-unsafe URLs before the server fetches them.
+ * Blocks unsafe URLs before anything fetches them.
  *
- * This matters: the student hands us a URL and our server requests it.
- * Without these checks someone could point Recall at an internal address
- * and use our server to probe a private network (an SSRF attack).
+ * The student hands us a URL and it gets requested — by the extension, from
+ * inside a logged-in Slate page. Without these checks someone could point
+ * Recall at an internal address and use it to probe a private network.
  */
 export function validateIcsUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {
   let url: URL;
@@ -44,6 +47,24 @@ export function validateIcsUrl(raw: string): { ok: true; url: URL } | { ok: fals
 
   if (isPrivate) {
     return { ok: false, reason: "That address isn't reachable. Use the calendar link from Slate." };
+  }
+
+  // The link must be Slate's own export endpoint.
+  //
+  // This is where the extension will fetch from — inside a logged-in Slate
+  // page — so anything else turns it into a general-purpose fetcher pointed
+  // wherever the link says, including addresses on the student's own network
+  // that no server-side check could reach. The extension enforces this too,
+  // and must: it is the component doing the fetching, and this page is only
+  // one of the ways a link reaches it.
+  //
+  // A real Moodle calendar link is always on this host, so nothing legitimate
+  // is turned away.
+  if (url.hostname.toLowerCase() !== SLATE_HOST) {
+    return {
+      ok: false,
+      reason: `That link isn't on Slate. Copy the calendar export link from ${SLATE_HOST}.`,
+    };
   }
 
   return { ok: true, url };
@@ -144,10 +165,6 @@ function mergeOpenClosePairs(items: ParsedDeadline[]): ParsedDeadline[] {
 }
 
 /**
- * Turns raw .ics text into deadline rows.
- * Events without a UID are skipped — we need it to de-duplicate on re-sync.
- */
-/**
  * How many events a calendar may contain.
  *
  * The raw feed is capped at 2MB, but a minimal VEVENT is about 200 bytes, so
@@ -159,6 +176,10 @@ function mergeOpenClosePairs(items: ParsedDeadline[]): ParsedDeadline[] {
  */
 export const MAX_EVENTS = 1000;
 
+/**
+ * Turns raw .ics text into deadline rows.
+ * Events without a UID are skipped — we need it to de-duplicate on re-sync.
+ */
 export function parseIcs(icsText: string): ParsedDeadline[] {
   const comp = new ICAL.Component(ICAL.parse(icsText));
   const events = comp.getAllSubcomponents("vevent");

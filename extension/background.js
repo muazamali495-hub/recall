@@ -1,9 +1,14 @@
-import { RECALL_ORIGIN, SYNC_PERIOD_MINUTES, REMINDER_PERIOD_MINUTES } from "./config.js";
+import {
+  RECALL_ORIGIN,
+  SYNC_PERIOD_MINUTES,
+  REMINDER_PERIOD_MINUTES,
+  SLATE_ORIGIN,
+  isSlateCalendarUrl,
+} from "./config.js";
 import { explainFailure, technicalTail } from "./diagnose.js";
 
 const ALARM = "recall-sync";
 const REMINDER_ALARM = "recall-reminders";
-const SLATE_ORIGIN = "https://slate.uol.edu.pk";
 
 /**
  * Slate sits behind Cloudflare, which rejects anything that doesn't look
@@ -109,6 +114,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // Stored locally on purpose: Recall's server never receives this URL,
     // only the calendar contents it returns.
     case "SET_ICAL_URL":
+      // The gate for every path — the popup, the website bridge, anything
+      // else. Both callers only check that the link starts with https://,
+      // which would let this extension be pointed at any address the caller
+      // chose and fetch it from inside a logged-in Slate page.
+      if (!isSlateCalendarUrl(message.url)) {
+        sendResponse({ ok: false, error: "That link isn't a Slate calendar address." });
+        return true;
+      }
+
       chrome.storage.local
         .set({ icalUrl: message.url })
         .then(() => syncNow())
@@ -301,6 +315,12 @@ export async function syncNow() {
 
   if (!deviceToken) throw new Error("Not paired with Recall yet.");
   if (!icalUrl) throw new Error("Add your Slate calendar link first.");
+
+  // Checked again at the point of use: storage could have been written before
+  // this rule existed, and this is the line that actually performs the fetch.
+  if (!isSlateCalendarUrl(icalUrl)) {
+    throw new Error("Your saved calendar link isn't a Slate address. Paste it again from Slate.");
+  }
 
   let ics;
   try {
