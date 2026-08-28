@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { askAction, type Turn } from "./actions";
 import { Working } from "../working";
+import { demath } from "@/lib/demath";
 
 /**
  * Renders the model's markdown-ish reply without pulling in a parser.
@@ -39,6 +40,26 @@ function Rendered({ text }: { text: string }) {
   let list: string[] = [];
   let ordered = false;
 
+  // Fenced code blocks. Without this a worked example arrives with literal
+  // ``` lines above and below it, which is what "explain eigenvalues" does
+  // every time.
+  let fenced: string[] | null = null;
+
+  const flushCode = () => {
+    if (fenced === null) return;
+    const code = fenced.join("\n");
+    fenced = null;
+    if (!code.trim()) return;
+    blocks.push(
+      <pre
+        key={blocks.length}
+        className="overflow-x-auto rounded-lg border border-line bg-white/[0.04] p-3 font-mono text-[0.8rem] leading-relaxed text-ink"
+      >
+        <code>{code}</code>
+      </pre>,
+    );
+  };
+
   const flush = () => {
     if (list.length === 0) return;
     const items = list.map((item, i) => (
@@ -60,8 +81,24 @@ function Rendered({ text }: { text: string }) {
     list = [];
   };
 
-  for (const raw of text.split("\n")) {
+  for (const raw of demath(text).split("\n")) {
     const line = raw.trimEnd();
+
+    // A fence toggles code mode; everything between goes through untouched.
+    if (/^\s*```/.test(line)) {
+      if (fenced === null) {
+        flush();
+        fenced = [];
+      } else {
+        flushCode();
+      }
+      continue;
+    }
+
+    if (fenced !== null) {
+      fenced.push(raw);
+      continue;
+    }
 
     // Models reach for headings and horizontal rules unprompted; without
     // these, replies show a literal "### " and "---" in the text.
@@ -101,6 +138,9 @@ function Rendered({ text }: { text: string }) {
     }
   }
   flush();
+  // An unterminated fence is common when a reply is cut short — show what
+  // arrived rather than dropping it.
+  flushCode();
 
   return <div className="flex flex-col gap-3 text-sm text-muted">{blocks}</div>;
 }
