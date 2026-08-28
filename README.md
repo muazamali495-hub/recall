@@ -203,6 +203,19 @@ planner prompt and prints a chain to paste into `OPENROUTER_TEXT_MODELS`.
 `GET /api/reminders/status` (signed in) reports every link in the reminder chain and
 names the broken one. `?retry=1` releases stuck claims.
 
+### Security checks
+
+```bash
+npm run test:rls        # can the public anon key read anything? (it ships in the browser)
+npm run test:csp        # has script-src quietly regained 'unsafe-inline'?
+```
+
+`scripts/isolation-check.sql` answers the one that matters most — can one
+student read another's data — by impersonating a signed-in session in Postgres.
+Paste it into the Supabase SQL editor. It needs no second account and leaves
+nothing behind, because the report is delivered by raising, which rolls the
+attempted writes back.
+
 ---
 
 ## Status
