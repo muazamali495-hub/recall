@@ -3,6 +3,7 @@
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { buildMessages, type StudentContext } from "@/lib/ask";
 import { callChat, LlmNotConfigured } from "@/lib/llm";
+import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -25,6 +26,10 @@ export async function askAction(
 ): Promise<AskState> {
   const user = await getCurrentUser();
   if (!user) return { error: "Your session expired. Please sign in again." };
+
+  // Free model pools are shared with every other student using Recall.
+  const gate = await checkLimit(LIMITS.ask);
+  if (!gate.allowed) return { error: gate.message };
 
   const trimmed = question.trim();
   if (!trimmed) return { error: "Type a question first." };

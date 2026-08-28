@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@/lib/supabase/server";
+import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 /**
  * Sends one notification to the signed-in student, right now.
@@ -17,6 +18,15 @@ export async function POST() {
   } = await supabase.auth.getUser();
 
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+  // Cheap to call, but it pushes a real notification to real devices.
+  const gate = await checkLimit(LIMITS.pushTest);
+  if (!gate.allowed) {
+    return NextResponse.json(
+      { error: gate.message },
+      { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+    );
+  }
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;

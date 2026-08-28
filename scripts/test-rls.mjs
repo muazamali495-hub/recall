@@ -107,9 +107,15 @@ for (const [fn, args] of RPCS) {
   });
 
   const body = await res.text();
-  // A 200 that returns real data is the failure. An error, or an empty
-  // result, is the function refusing.
-  const leaked = res.ok && body.length > 4 && body !== "null" && body !== "[]";
+
+  // "Refused" is not the same as "errored". pair_device answers a bad code
+  // with {"ok":false} and HTTP 200 on purpose — it has to return rather than
+  // raise so the throttle's counter survives the transaction. Treating any
+  // response body as a leak would fail on a function doing exactly its job,
+  // so the question asked here is whether it actually gave something up.
+  const refusedInBody = /"ok"\s*:\s*false/.test(body);
+  const leaked =
+    res.ok && !refusedInBody && body.length > 4 && body !== "null" && body !== "[]";
   report(
     `${fn}(${Object.keys(args)[0]}=…) refuses`,
     !leaked,

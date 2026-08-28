@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildStudyPlan, type PlannerContext, type StudyPlan } from "@/lib/planner";
 import { LlmNotConfigured } from "@/lib/llm";
+import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -25,6 +26,9 @@ export async function createPlanAction(_prev: PlanState, formData: FormData): Pr
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "Your session expired. Please sign in again." };
+
+  const gate = await checkLimit(LIMITS.planner);
+  if (!gate.allowed) return { error: gate.message };
 
   const material = String(formData.get("material") ?? "").trim();
   const deadlineId = String(formData.get("deadline_id") ?? "").trim();

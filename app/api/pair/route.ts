@@ -33,13 +33,35 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
-  const { error } = await supabase.rpc("pair_device", {
+  const { data, error } = await supabase.rpc("pair_device", {
     p_code: code,
     p_token_hash: hashDeviceToken(token),
     p_label: String(body.label ?? "Chrome extension").slice(0, 60),
   });
 
   if (error) {
+    return NextResponse.json(
+      { error: "Could not link this device. Please try again." },
+      { status: 500, headers: CORS_HEADERS },
+    );
+  }
+
+  // A rejected code now comes back as a value rather than an error: the
+  // throttle has to count failures, and raising would roll that count back
+  // along with the rest of the transaction.
+  const result = data as { ok: boolean; reason?: string; retry_after?: number } | null;
+
+  if (!result?.ok) {
+    if (result?.reason === "throttled") {
+      return NextResponse.json(
+        { error: "Too many pairing attempts right now. Try again in a few minutes." },
+        {
+          status: 429,
+          headers: { ...CORS_HEADERS, "Retry-After": String(result.retry_after ?? 600) },
+        },
+      );
+    }
+
     return NextResponse.json(
       { error: "That code is invalid or has expired. Generate a new one in Recall." },
       { status: 401, headers: CORS_HEADERS },

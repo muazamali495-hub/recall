@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractTimetable, LlmNotConfigured, type ExtractedClass } from "@/lib/vision";
+import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
@@ -30,6 +31,11 @@ export async function extractTimetableAction(
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "Your session expired. Please sign in again." };
+
+  // The most expensive call Recall makes: a vision model reading page images.
+  // Guarded here rather than on save, because saving is free.
+  const gate = await checkLimit(LIMITS.timetable);
+  if (!gate.allowed) return { error: gate.message };
 
   const section = String(formData.get("section") ?? "").trim();
   const file = formData.get("timetable");
