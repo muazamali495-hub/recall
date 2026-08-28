@@ -1,4 +1,5 @@
 import { RECALL_ORIGIN, SYNC_PERIOD_MINUTES, REMINDER_PERIOD_MINUTES } from "./config.js";
+import { explainFailure } from "./diagnose.js";
 
 const ALARM = "recall-sync";
 const REMINDER_ALARM = "recall-reminders";
@@ -135,31 +136,54 @@ async function setStatus(patch) {
 /** Runs inside the Slate page. Must be self-contained — it is serialised across. */
 function fetchInPage(url) {
   return fetch(url, { credentials: "include", cache: "no-store" })
-    .then(async (res) => ({ ok: res.ok, status: res.status, text: res.ok ? await res.text() : "" }))
-    .catch((e) => ({ ok: false, status: 0, text: "", error: String(e) }));
+    .then(async (res) => {
+      const body = await res.text();
+      return {
+        ok: res.ok,
+        status: res.status,
+        // Where we ended up. Moodle sends you to /login/ when the session has
+        // gone, and that redirect is the clearest signal there is.
+        finalUrl: res.url,
+        redirected: res.redirected,
+        text: res.ok ? body : "",
+        // The failure body used to be thrown away, which made a Cloudflare
+        // challenge and a rejected calendar token — two problems with
+        // completely different fixes — produce one identical message.
+        detail: res.ok ? "" : body.slice(0, 800),
+      };
+    })
+    .catch((e) => ({ ok: false, status: 0, text: "", detail: "", error: String(e) }));
 }
 
-function waitForLoad(tabId, timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const poll = setInterval(async () => {
-      let tab;
-      try {
-        tab = await chrome.tabs.get(tabId);
-      } catch {
-        clearInterval(poll);
-        return reject(new Error("Slate tab closed before it finished loading."));
-      }
-      if (tab.status === "complete") {
-        clearInterval(poll);
-        return resolve();
-      }
-      if (Date.now() - started > timeoutMs) {
-        clearInterval(poll);
-        return reject(new Error("Slate took too long to load."));
-      }
-    }, 300);
-  });
+/** Runs inside the Slate tab. Must be self-contained — it is serialised across. */
+function probePage() {
+  return {
+    url: location.href,
+    challenged: /just a moment|checking your browser|attention required/i.test(document.title),
+  };
+}
+
+/**
+ * Waits for the tab to be actually showing Slate.
+ *
+ * chrome.tabs reports status "complete" for Cloudflare's interstitial too — it
+ * is a fully loaded page, just not the one we want. Injecting at that moment
+ * fetches from a context Cloudflare has not cleared yet, which comes back 403
+ * and looks exactly like being signed out.
+ */
+async function waitPastCloudflare(tabId, timeoutMs = 20000) {
+  const started = Date.now();
+
+  for (;;) {
+    const [probe] = await chrome.scripting.executeScript({ target: { tabId }, func: probePage });
+    const page = probe?.result;
+
+    if (!page) return null;
+    if (!page.challenged) return page;
+    if (Date.now() - started > timeoutMs) return page;
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 /** Uses an open Slate tab if there is one; otherwise opens a hidden one briefly. */
@@ -177,6 +201,19 @@ async function fetchIcsViaSlate(icalUrl) {
   }
 
   try {
+    const page = await waitPastCloudflare(tabId);
+
+    // Caught before the fetch, because "you are signed out" is a far more
+    // useful thing to be told than "403".
+    if (page?.url?.includes("/login/")) {
+      throw new Error("You're signed out of Slate. Open Slate, log in, then try again.");
+    }
+    if (page?.challenged) {
+      throw new Error(
+        "Cloudflare is still checking the browser. Open Slate in a tab, wait for it to load, then try again.",
+      );
+    }
+
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId },
       func: fetchInPage,
@@ -186,13 +223,7 @@ async function fetchIcsViaSlate(icalUrl) {
     const result = injection?.result;
     if (!result) throw new Error("Could not run inside Slate. Try opening Slate in a tab.");
 
-    if (!result.ok) {
-      throw new Error(
-        result.status === 403
-          ? "Slate refused the request. Open Slate, make sure you're logged in, then sync again."
-          : `Slate returned ${result.status || "no response"}. Copy a fresh calendar link.`,
-      );
-    }
+    if (!result.ok) throw new Error(explainFailure(result));
 
     return result.text;
   } finally {
