@@ -65,24 +65,25 @@ const ITEMS: Item[] = [
 ];
 
 /**
- * `byline` is for the mobile top bar only. The desktop sidebar carries the
- * credit at its foot, but that whole sidebar is lg:flex — so on a phone there
- * was nowhere it appeared at all.
+ * The wordmark, wherever it appears.
+ *
+ * The credit sits under the name in both places. It was mobile-only at first,
+ * on the reasoning that the desktop sidebar already carries it at the foot —
+ * but the foot of a sidebar is not the header, so on a laptop the header had
+ * no credit at all. The footer link stays: it goes to GitHub, and the landing
+ * page does the same thing, naming the author in the nav and linking him at
+ * the bottom.
  */
-const Brand = ({ byline = false }: { byline?: boolean }) => (
+const Brand = () => (
   <Link href="/dashboard" className="flex items-center gap-2.5 px-2 font-bold tracking-tight">
     {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size brand mark */}
     <img src="/logo.png" alt="" width={26} height={26} className="rounded-[22%]" aria-hidden="true" />
-    {byline ? (
-      <span className="flex flex-col leading-tight">
-        Recall
-        <span className="text-[0.6rem] font-medium uppercase tracking-[0.04em] text-faint">
-          by Muazzam Ali
-        </span>
+    <span className="flex flex-col leading-tight">
+      Recall
+      <span className="text-[0.6rem] font-medium uppercase tracking-[0.04em] text-faint">
+        by Muazzam Ali
       </span>
-    ) : (
-      "Recall"
-    )}
+    </span>
   </Link>
 );
 
@@ -147,7 +148,7 @@ export function Sidebar({ name, email }: { name: string | null; email: string })
           from. Against a 90%-opaque background the blur was doing almost
           nothing visible anyway. */}
       <div className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-line bg-ground px-4 lg:hidden">
-        <Brand byline />
+        <Brand />
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Close menu" : "Open menu"}
