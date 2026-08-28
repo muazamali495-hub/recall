@@ -7,6 +7,19 @@ const TAG = "recall-extension";
 
 type Phase = "idle" | "checking" | "done" | "absent" | "failed";
 
+/** "0.2.0" > "0.1.0", and 0.10.0 > 0.9.0 — which a string compare gets wrong. */
+function isOlder(installed: string, latest: string): boolean {
+  const a = installed.split(".").map(Number);
+  const b = latest.split(".").map(Number);
+  if (a.some(Number.isNaN) || b.some(Number.isNaN)) return false;
+
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diff !== 0) return diff < 0;
+  }
+  return false;
+}
+
 /**
  * Refreshes Slate from whichever device is looking at this page.
  *
@@ -20,10 +33,19 @@ type Phase = "idle" | "checking" | "done" | "absent" | "failed";
  * whether it is really due, so re-loading this page does not mean re-fetching
  * from Slate. The button is there for when the student wants it regardless.
  */
-export function RefreshNow({ lastSyncedAt }: { lastSyncedAt: string | null }) {
+export function RefreshNow({
+  lastSyncedAt,
+  latestVersion,
+  installUrl,
+}: {
+  lastSyncedAt: string | null;
+  latestVersion: string;
+  installUrl: string | null;
+}) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [installedVersion, setInstalledVersion] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -36,10 +58,14 @@ export function RefreshNow({ lastSyncedAt }: { lastSyncedAt: string | null }) {
 
       // The extension announces itself on load; that is how we know this
       // device is the one that can talk to Slate.
-      if (data.type === "READY" && data.state?.paired && data.state?.hasCalendarUrl) {
-        settled = true;
-        setPhase("checking");
-        window.postMessage({ target: TAG, type: "SYNC_IF_STALE" }, window.location.origin);
+      if (data.type === "READY") {
+        if (typeof data.version === "string") setInstalledVersion(data.version);
+
+        if (data.state?.paired && data.state?.hasCalendarUrl) {
+          settled = true;
+          setPhase("checking");
+          window.postMessage({ target: TAG, type: "SYNC_IF_STALE" }, window.location.origin);
+        }
         return;
       }
 
@@ -113,30 +139,66 @@ export function RefreshNow({ lastSyncedAt }: { lastSyncedAt: string | null }) {
     window.addEventListener("message", onDone);
   }
 
+  const outdated = installedVersion !== null && isOlder(installedVersion, latestVersion);
+
+  /* An unpacked extension loads from a folder on disk. Reloading it at
+     chrome://extensions re-reads that folder — it does not fetch anything — so
+     hitting reload after an update genuinely changes nothing until the files
+     underneath are replaced. That is invisible from Chrome's side: the version
+     simply stays put, which looks like the reload failed. */
+  const updateNotice = outdated ? (
+    <div className="mt-4 rounded-xl border border-amber/25 bg-amber/[0.06] p-3.5">
+      <p className="text-xs font-semibold text-amber">
+        Extension {installedVersion} — version {latestVersion} is available
+      </p>
+      <p className="mt-1.5 text-xs text-muted">
+        Reloading at <code className="text-faint">chrome://extensions</code> re-reads the folder
+        you loaded it from; it doesn&apos;t download anything. Replace that folder&apos;s contents
+        with the new download, keeping the same location, then reload. Same location matters —
+        a new folder is a new extension to Chrome, and you&apos;d have to link it again.
+      </p>
+      {installUrl && (
+        <a
+          href={installUrl}
+          className="mt-2.5 inline-block rounded-lg border border-amber/30 px-3 py-1.5 text-xs font-medium text-amber transition hover:bg-amber/10"
+        >
+          Download {latestVersion}
+        </a>
+      )}
+    </div>
+  ) : null;
+
   // Nothing to offer on a device without the extension. The page already
   // explains that syncing belongs to the account, not to this device.
   if (phase === "absent") {
     return (
-      <p className="mt-3 text-xs text-faint">
-        Slate is checked from the computer with the extension, and only while
-        Chrome is open there. {lastSyncedAt ? "Open Recall on that computer to refresh it now." : null}
-      </p>
+      <>
+        <p className="mt-3 text-xs text-faint">
+          Slate is checked from the computer with the extension, and only while
+          Chrome is open there.{" "}
+          {lastSyncedAt ? "Open Recall on that computer to refresh it now." : null}
+        </p>
+        {updateNotice}
+      </>
     );
   }
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
-      <button
-        onClick={checkNow}
-        disabled={phase === "checking"}
-        className="rounded-lg border border-line-2 px-3 py-1.5 text-xs font-medium text-muted transition hover:bg-white/5 hover:text-ink disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
-      >
-        {phase === "checking" ? "Checking Slate…" : "Check now"}
-      </button>
+    <>
+      {updateNotice}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          onClick={checkNow}
+          disabled={phase === "checking"}
+          className="rounded-lg border border-line-2 px-3 py-1.5 text-xs font-medium text-muted transition hover:bg-white/5 hover:text-ink disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+        >
+          {phase === "checking" ? "Checking Slate…" : "Check now"}
+        </button>
 
-      {message && (
-        <p className={`text-xs ${phase === "failed" ? "text-amber" : "text-mint"}`}>{message}</p>
-      )}
-    </div>
+        {message && (
+          <p className={`text-xs ${phase === "failed" ? "text-amber" : "text-mint"}`}>{message}</p>
+        )}
+      </div>
+    </>
   );
 }

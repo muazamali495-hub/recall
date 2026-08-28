@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { ConnectSwitch } from "./connect-switch";
+// The version that ships in the download. Read from the extension's own
+// manifest so it can never drift from what is actually packaged — the page
+// compares it against what the installed extension reports.
+import extensionManifest from "../../../extension/manifest.json";
 
 export default async function ConnectPage() {
   const supabase = await createClient();
@@ -49,6 +53,7 @@ export default async function ConnectPage() {
         syncedFrom={syncedDevice?.label ?? null}
         lastSyncedAt={syncedDevice?.last_seen_at ?? null}
         deadlineCount={deadlineCount ?? 0}
+        latestExtensionVersion={extensionManifest.version}
       />
 
       {linked && devices && (

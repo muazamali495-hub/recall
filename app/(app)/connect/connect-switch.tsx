@@ -32,6 +32,7 @@ export function ConnectSwitch({
   syncedFrom,
   lastSyncedAt,
   deadlineCount,
+  latestExtensionVersion,
 }: {
   alreadyLinked: boolean;
   installUrl: string | null;
@@ -39,6 +40,7 @@ export function ConnectSwitch({
   syncedFrom: string | null;
   lastSyncedAt: string | null;
   deadlineCount: number;
+  latestExtensionVersion: string;
 }) {
   const inApp = useIsRecallApp();
   const [showManual, setShowManual] = useState(false);
@@ -81,7 +83,11 @@ export function ConnectSwitch({
             closed.
           </p>
 
-          <RefreshNow lastSyncedAt={lastSyncedAt} />
+          <RefreshNow
+            lastSyncedAt={lastSyncedAt}
+            latestVersion={latestExtensionVersion}
+            installUrl={installUrl}
+          />
         </div>
 
         <button
