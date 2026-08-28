@@ -36,6 +36,21 @@ function pakistanNow(now: Date) {
   return new Date(now.getTime() + PKT_OFFSET_MS);
 }
 
+/**
+ * How late a class reminder may still be sent.
+ *
+ * The job runs on GitHub's scheduler, which is explicitly best-effort: a run
+ * booked for every few minutes can arrive twenty minutes late, or be dropped
+ * entirely when the platform is busy. The old rule only fired a reminder if a
+ * run happened to land inside the lead window, so a delayed run meant the
+ * class was never announced at all — which is why a four-class day produced
+ * one notification.
+ *
+ * A late reminder is still worth sending, worded honestly. Silence is the one
+ * outcome with no value.
+ */
+const CLASS_CATCH_UP_MINUTES = 20;
+
 const KIND_WORDS: Record<string, string> = {
   quiz: "Quiz",
   exam: "Exam",
@@ -73,19 +88,27 @@ export function planReminders(
     const startsAt = h * 60 + m;
     const minutesUntil = startsAt - minutesNow;
 
-    // Fire once inside the lead window, never after the class has begun.
-    if (minutesUntil <= 0 || minutesUntil > lead) continue;
+    // Too far off, or so long past that the reminder is no longer news.
+    if (minutesUntil > lead || minutesUntil < -CLASS_CATCH_UP_MINUTES) continue;
 
     const dateKey = local.toISOString().slice(0, 10);
+    const lateBy = -minutesUntil;
 
     planned.push({
       kind: "class",
+      // The date makes this unique per class per day, so a class is announced
+      // exactly once however many runs fall inside the band above.
       refId: `${c.id}:${dateKey}`,
-      windowKey: `${lead}m`,
+      // Deliberately not `${lead}m`: keying on the lead time meant that
+      // changing the preference re-opened every reminder already sent that
+      // day, pinging the student twice for the same class.
+      windowKey: "class",
       title:
-        minutesUntil <= 5
-          ? `${c.course} is starting`
-          : `${c.course} in ${minutesUntil} min`,
+        minutesUntil > 5
+          ? `${c.course} in ${minutesUntil} min`
+          : minutesUntil >= -1
+            ? `${c.course} is starting`
+            : `${c.course} started ${lateBy} min ago`,
       body: c.room ? `Room ${c.room}` : "Room not set",
       url: "/dashboard",
     });

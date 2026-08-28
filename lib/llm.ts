@@ -9,9 +9,40 @@
  */
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
+/**
+ * How long one model gets before we give up on it.
+ *
+ * Without this a stalled pool holds the race open until Vercel kills the whole
+ * request at maxDuration, so the student waits the full 60 seconds and then
+ * gets an error — even when a fast model failed early and could have said so.
+ * Cutting a straggler loose lets the honest "everything is busy" message
+ * arrive while it is still useful.
+ */
+const CALL_TIMEOUT_MS = 40_000;
+
+/**
+ * Measured against the real study-planner prompt (scripts/check-text-models.mjs),
+ * ordered by how quickly they returned usable JSON.
+ *
+ * The previous chain was two gemma pools plus openrouter/free. All three timed
+ * out past 75 seconds on every run of that test — which is exactly what the
+ * planner felt like to use: a long wait ending in "every free model was busy".
+ * Neither gemma pool has answered a single test since, so they are gone rather
+ * than demoted.
+ *
+ * Free capacity moves fast enough that this list is a starting bet, not a
+ * fact: minimax-m3 returned a clean plan in 12s and a 402 three minutes later.
+ * That is why callChat/callModel race the whole list instead of walking it.
+ */
 const TEXT_MODELS = (
   process.env.OPENROUTER_TEXT_MODELS ??
-  ["google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free", "openrouter/free"].join(",")
+  [
+    "minimax/minimax-m2.7:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax/minimax-m3:free",
+    "z-ai/glm-5.2:free",
+    "openrouter/free",
+  ].join(",")
 )
   .split(",")
   .map((m) => m.trim())
@@ -26,16 +57,27 @@ export class LlmNotConfigured extends Error {
 type Body = Record<string, unknown>;
 
 async function callOne(apiKey: string, body: Body, signal: AbortSignal): Promise<string> {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "X-Title": "Recall",
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
+  // Two ways to stop: a winner was found, or this pool is taking too long.
+  const timeout = AbortSignal.timeout(CALL_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "X-Title": "Recall",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.any([signal, timeout]),
+    });
+  } catch (err) {
+    // Distinguish "we stopped it because someone else won" from "this pool
+    // never answered", so the failure summary names the real problem.
+    if (timeout.aborted) throw new Error(`no response in ${CALL_TIMEOUT_MS / 1000}s`);
+    throw err;
+  }
 
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
@@ -93,10 +135,19 @@ async function race(apiKey: string, models: string[], makeBody: (model: string) 
               reject(new Error(err.message.slice(5).trim()));
               return;
             }
-            errors.push(`${model}: ${err.message}`);
+            errors.push(`${model.replace(/:free$/, "")} — ${err.message}`);
             outstanding -= 1;
             if (outstanding === 0 && !settled) {
-              reject(new Error(`Every free model was busy or refused. (${errors[0] ?? "unknown"})`));
+              // Naming several: the first failure is usually the fastest one,
+              // which is a 429 from a pool that was never going to be the one
+              // that answered. On its own it made every outage look identical.
+              reject(
+                new Error(
+                  `Every free AI model is busy right now. Try again in a minute.\n\n${errors
+                    .slice(0, 4)
+                    .join("\n")}`,
+                ),
+              );
             }
           });
       }
@@ -111,7 +162,11 @@ export async function callModel(prompt: string, maxTokens = 2500): Promise<strin
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new LlmNotConfigured();
 
-  return race(apiKey, TEXT_MODELS.slice(0, 3), (model) => ({
+  // The whole list, not the first few. Free pools fail independently and
+  // unpredictably — on one test run three of five were 429 within the same
+  // second — so the only reliable way to get an answer is to ask everyone and
+  // take the first one home. The losers are aborted the moment a winner lands.
+  return race(apiKey, TEXT_MODELS, (model) => ({
     model,
     messages: [{ role: "user", content: prompt }],
     max_tokens: maxTokens,
@@ -125,9 +180,9 @@ export async function callChat(messages: ChatMessage[], maxTokens = 1800): Promi
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new LlmNotConfigured();
 
-  // Three, not two: free pools 429 constantly, and text requests are small
-  // enough that the extra concurrent call costs nothing meaningful.
-  return race(apiKey, TEXT_MODELS.slice(0, 3), (model) => ({
+  // Same reasoning as callModel: race the lot. Text requests are small, so the
+  // extra concurrent calls cost nothing meaningful and buy availability.
+  return race(apiKey, TEXT_MODELS, (model) => ({
     model,
     messages,
     max_tokens: maxTokens,

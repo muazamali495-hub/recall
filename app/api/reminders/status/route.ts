@@ -63,7 +63,7 @@ export async function GET(request: Request) {
     ]);
 
   const prefs: ReminderPrefs = prefsRow ?? {
-    class_minutes_before: 30,
+    class_minutes_before: 15,
     deadline_hours_ahead: [24, 2, 0.5],
     enabled: true,
   };

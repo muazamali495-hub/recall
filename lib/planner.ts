@@ -1,3 +1,4 @@
+import { parseJsonLoosely } from "./json";
 import { callModel } from "./llm";
 
 export type StudyBlock = {
@@ -38,7 +39,13 @@ function buildPrompt(ctx: PlannerContext) {
     ? `${ctx.target.kind} "${ctx.target.title}"${ctx.target.course ? ` for ${ctx.target.course}` : ""}, due ${ctx.target.dueAt}`
     : "no specific assessment — general revision";
 
-  return `You are a study coach for a university student in Pakistan. Today is ${ctx.today}, ${ctx.nowLabel}.
+  // The output contract is stated first and repeated last. Weak free models
+  // reliably obey one end of a prompt or the other, and which end varies by
+  // model — nemotron narrated its reasoning before answering until the shape
+  // was put up front. Saying it twice costs a few tokens and fixed it.
+  return `Output JSON only. No prose before it, no explanation after it, no markdown fences.
+
+You are a study coach for a university student in Pakistan. Today is ${ctx.today}, ${ctx.nowLabel}.
 
 They are preparing for: ${target}
 
@@ -69,13 +76,19 @@ Return ONLY JSON in exactly this shape, with no prose and no markdown fences:
 
 /** Drops anything the model produced that breaks the scheduling rules. */
 function sanitise(plan: StudyPlan, ctx: PlannerContext): StudyPlan {
-  const toMinutes = (t: string) => {
+  // Not typed as string: a truncated reply can be repaired into a block whose
+  // last field never arrived, and a bare .match() on undefined throws — which
+  // would turn a recoverable plan into a 500.
+  const toMinutes = (t: unknown) => {
+    if (typeof t !== "string") return null;
     const m = t.match(/^(\d{1,2}):(\d{2})$/);
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   };
 
   const blocks = plan.blocks.filter((b) => {
+    if (!b || typeof b !== "object") return false;
     if (!DAYS.includes(b.day)) return false;
+    if (typeof b.topic !== "string" || !b.topic.trim()) return false;
 
     const start = toMinutes(b.start);
     const end = toMinutes(b.end);
@@ -100,21 +113,16 @@ function sanitise(plan: StudyPlan, ctx: PlannerContext): StudyPlan {
 }
 
 export async function buildStudyPlan(ctx: PlannerContext): Promise<StudyPlan> {
-  const raw = await callModel(buildPrompt(ctx));
+  // 3500, not the 2500 default: a plan with six blocks plus reasons runs long,
+  // and a model that hits the ceiling stops mid-object. parseJsonLoosely can
+  // rescue those, but a plan that was never cut off is better than a repaired
+  // one.
+  const raw = await callModel(buildPrompt(ctx), 3500);
 
-  const withoutFences = raw.replace(/```(?:json)?/gi, "").trim();
-  const start = withoutFences.indexOf("{");
-  const end = withoutFences.lastIndexOf("}");
+  const parsed = parseJsonLoosely<StudyPlan>(raw);
 
-  if (start < 0 || end <= start) {
+  if (!parsed) {
     throw new Error("Could not build a plan from that. Try adding a bit more detail.");
-  }
-
-  let parsed: StudyPlan;
-  try {
-    parsed = JSON.parse(withoutFences.slice(start, end + 1));
-  } catch {
-    throw new Error("Could not build a plan from that. Try again.");
   }
 
   return sanitise(

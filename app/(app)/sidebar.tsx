@@ -126,8 +126,13 @@ export function Sidebar({ name, email }: { name: string | null; email: string })
 
   return (
     <>
-      {/* ---------- Mobile top bar ---------- */}
-      <div className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-line bg-gradient-to-b from-ground/90 to-ground/60 px-4 backdrop-blur-xl lg:hidden">
+      {/* ---------- Mobile top bar ----------
+          Solid, not translucent-with-blur. These two bars are lg:hidden, so
+          every backdrop-filter here landed only on phones — stacked on top of
+          the dashboard's 3D deck, which is where the half-black screen came
+          from. Against a 90%-opaque background the blur was doing almost
+          nothing visible anyway. */}
+      <div className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-line bg-ground px-4 lg:hidden">
         <Brand />
         <button
           onClick={() => setOpen((v) => !v)}
@@ -146,7 +151,7 @@ export function Sidebar({ name, email }: { name: string | null; email: string })
       </div>
 
       {open && (
-        <div className="sticky top-14 z-40 border-b border-line bg-ground/95 px-4 py-3 backdrop-blur-xl lg:hidden">
+        <div className="sticky top-14 z-40 border-b border-line bg-ground px-4 py-3 lg:hidden">
           <NavList onNavigate={() => setOpen(false)} />
 
           {/* Sign out lives in the desktop sidebar too, but that is hidden on

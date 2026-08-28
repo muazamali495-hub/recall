@@ -1,3 +1,4 @@
+import { parseJsonLoosely } from "./json";
 import { callVisionModel, LlmNotConfigured } from "./llm";
 
 export type ExtractedClass = {
@@ -87,7 +88,7 @@ export async function extractTimetable(
 
   const raw = await callVisionModel(buildPrompt(section), images, MODEL_CHAIN);
 
-  const parsed = parseLoosely(raw);
+  const parsed = parseJsonLoosely<{ classes?: Array<Record<string, string>> }>(raw);
   if (!parsed) throw new Error("Could not read that timetable. Try a clearer image.");
 
   return (parsed.classes ?? []).flatMap((row) => {
@@ -107,25 +108,6 @@ export async function extractTimetable(
       },
     ];
   });
-}
-
-/**
- * Free models ignore strict JSON-schema enforcement, so they often wrap the
- * answer in prose or ```json fences. We take the outermost JSON object rather
- * than trusting the reply to be clean.
- */
-function parseLoosely(text: string): { classes?: Array<Record<string, string>> } | null {
-  const withoutFences = text.replace(/```(?:json)?/gi, "").trim();
-
-  const start = withoutFences.indexOf("{");
-  const end = withoutFences.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-
-  try {
-    return JSON.parse(withoutFences.slice(start, end + 1));
-  } catch {
-    return null;
-  }
 }
 
 /** Accepts "9:30", "09:30", "9:30 AM" and returns "HH:MM", or null. */

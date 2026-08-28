@@ -290,15 +290,35 @@
   .reveal { opacity: 1; transform: none; }
 }
 
-/* ---------- Mobile: no cursor to follow ----------
-   The tilt is driven by mousemove, which never fires on a touch screen, so the
-   hero panel sat perfectly flat on phones. A slow sway keeps the depth without
-   needing a pointer. The JS bails out on (hover: none) so it doesn't fight
-   this by writing an inline transform. */
+/* ---------- Touch devices: flat, and deliberately so ----------
+   See the matching note in dashboard.module.css. A permanently-animating
+   preserve-3d layer wrapping a backdrop-filter, next to large blurs, makes
+   WebKit hand back unpainted (black) tiles under memory pressure. The sway
+   was pretty; a half-black screen is not. */
 @media (hover: none) {
+  .scene {
+    perspective: none;
+  }
+
   .deck {
-    animation: sway 11s ease-in-out infinite;
+    animation: none;
     transition: none;
+    transform: none;
+    transform-style: flat;
+    will-change: auto;
+  }
+
+  .panel,
+  .nav {
+    backdrop-filter: none;
+  }
+
+  .glow {
+    display: none;
+  }
+
+  .chipFloat {
+    animation: none;
   }
 }
 

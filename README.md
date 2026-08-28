@@ -73,6 +73,22 @@ useless, so the rule is enforced in code, not in the prompt.
 dense grids, so every extracted class is editable before it's saved. Wrong times mean
 wrong reminders — the one thing this app cannot get wrong.
 
+**A late reminder still goes out.** Class alerts are driven by GitHub Actions,
+whose scheduler is best-effort — a run booked for every few minutes can arrive
+twenty minutes late or be dropped entirely. The original rule only fired if a
+run landed inside the lead window, so a delayed run meant the class was never
+announced at all; a four-class day produced one notification. Now a reminder up
+to 20 minutes late is still sent, worded honestly ("Databases started 8 min
+ago"), and the workflow keeps a worker alive pinging on its own timer instead
+of trusting the schedule.
+
+**No free model is dependable, so they are raced.** Availability moves by the
+minute — one pool returned a clean study plan and a `402` three minutes later,
+and the planner's original models went from working to timing out on every
+request without the app changing. Every text call fires at the whole chain at
+once and takes the first usable answer; `npm run check:models` re-measures which
+pools are alive.
+
 **Reminder sends roll back.** A reminder is claimed *before* sending so two overlapping
 runs can't double-send. If every delivery then fails, the claim is released and the
 next run retries — otherwise a failed send would vanish silently forever.
@@ -159,10 +175,17 @@ scripts/            diagnostics and tests
 ## Tests and diagnostics
 
 ```bash
-node scripts/test-reminders.ts    # scheduling rules — no DB or browser needed
-node scripts/test-ics.ts          # .ics parsing against realistic Moodle output
-node scripts/check-vision.mjs     # which free models are answering right now
+npm test                 # scheduling rules, .ics parsing, loose JSON — no DB or browser
+npm run test:planner     # end-to-end: does a free model actually return a usable plan?
+npm run check:models     # which free text models are answering right now
+npm run check:vision     # same, for the timetable reader
 ```
+
+`check:models` is the one to reach for when an AI feature starts failing. Free
+pools come and go without notice — the study planner's original chain of two
+gemma pools plus `openrouter/free` went from working to timing out on all three
+without anything in the app changing. It tests each free model against the real
+planner prompt and prints a chain to paste into `OPENROUTER_TEXT_MODELS`.
 
 `GET /api/reminders/status` (signed in) reports every link in the reminder chain and
 names the broken one. `?retry=1` releases stuck claims.

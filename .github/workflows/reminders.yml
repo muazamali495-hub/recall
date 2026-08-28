@@ -1,45 +1,87 @@
 name: Send due reminders
 
-# Vercel's Hobby plan only allows one cron run per day, which is useless for
-# reminders. GitHub Actions is free on public repositories and runs far more
-# often, so it drives the job instead.
+# Vercel's Hobby plan allows one cron run per day, which is useless for
+# reminders. GitHub Actions is free and unlimited on public repositories, so it
+# drives the job instead.
 #
-# Note: GitHub's scheduler is best-effort and can run late under load. The
-# reminder windows (30 min / 2h / 24h) are wide enough to absorb that, and
-# nothing is ever sent twice because each reminder is claimed in the database
-# before it goes out.
+# ---- Why this loops instead of just scheduling every few minutes ----
+#
+# GitHub's `schedule:` trigger is best-effort and documented as such. A
+# workflow asking for */10 routinely fires twenty minutes late, and during
+# platform peaks the run is dropped entirely rather than queued. A class
+# reminder has a lead time of fifteen minutes, so a dropped trigger meant the
+# class was simply never announced — which is what a student saw as one
+# notification on a four-class day.
+#
+# So the schedule is only used to *start* a worker, and the worker then pings
+# on its own timer for the next forty minutes. Runs are started more often
+# than they finish, so two or three overlap at any moment and it takes three
+# consecutive dropped triggers before a gap appears. Overlap is harmless:
+# every reminder is claimed in the database before it is sent, so whichever
+# run gets there first is the only one that sends.
 
 on:
   schedule:
-    - cron: "*/10 * * * *" # every 10 minutes
-  workflow_dispatch: # lets you trigger a run by hand from the Actions tab
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      once:
+        description: "Ping once and stop, instead of looping"
+        type: boolean
+        default: true
+
+# Deliberately no `concurrency:` group — overlapping workers are the whole
+# point. Cancelling the previous one would reintroduce the gaps.
 
 jobs:
   remind:
     runs-on: ubuntu-latest
+    timeout-minutes: 50
+
     steps:
-      - name: Trigger reminder run
+      - name: Ping the reminder endpoint on a three-minute timer
         env:
           RECALL_URL: ${{ secrets.RECALL_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ONCE: ${{ inputs.once }}
         run: |
           if [ -z "$RECALL_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "::error::Set the RECALL_URL and CRON_SECRET repository secrets."
             exit 1
           fi
 
-          response=$(curl -sS -w '\n%{http_code}' -X POST \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 60 \
-            "$RECALL_URL/api/cron/reminders")
+          # Stop before the 50-minute job timeout so the run ends cleanly.
+          DEADLINE=$(( $(date +%s) + 40 * 60 ))
+          failures=0
+          pings=0
 
-          body=$(echo "$response" | head -n -1)
-          code=$(echo "$response" | tail -n 1)
+          while :; do
+            response=$(curl -sS -w '\n%{http_code}' -X POST \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              --max-time 60 \
+              "$RECALL_URL/api/cron/reminders" || echo $'\n000')
 
-          echo "HTTP $code"
-          echo "$body"
+            body=$(echo "$response" | head -n -1)
+            code=$(echo "$response" | tail -n 1)
+            pings=$((pings + 1))
 
-          if [ "$code" != "200" ]; then
-            echo "::error::Reminder run failed with HTTP $code"
-            exit 1
-          fi
+            echo "$(date -u '+%H:%M:%SZ')  HTTP $code  $body"
+
+            if [ "$code" != "200" ]; then
+              failures=$((failures + 1))
+              # One bad response is a blip — Vercel cold starts, a Supabase
+              # hiccup. Three in a row is an outage worth a red build.
+              if [ "$failures" -ge 3 ]; then
+                echo "::error::Three consecutive failed reminder runs (last: HTTP $code)"
+                exit 1
+              fi
+            else
+              failures=0
+            fi
+
+            [ "$ONCE" = "true" ] && break
+            [ "$(date +%s)" -ge "$DEADLINE" ] && break
+            sleep 180
+          done
+
+          echo "Completed $pings ping(s)."

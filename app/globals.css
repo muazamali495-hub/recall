@@ -35,6 +35,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Last line of defence against the mobile black screen.
+   The page background is painted on <body>. When WebKit hands back a tile it
+   failed to paint — which is what the half-black screen was — the colour that
+   shows through is whatever is behind, and with no background on <html> that
+   is black. Naming it here means the worst case is a plain dark page rather
+   than a black rectangle across half the screen. */
+html {
+  background-color: var(--ground);
+}
+
 body {
   background:
     radial-gradient(1100px 650px at 78% -8%, rgba(87, 230, 193, 0.1), transparent 55%),

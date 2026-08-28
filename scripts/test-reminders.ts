@@ -4,16 +4,18 @@
  */
 import { planReminders, type ClassRow, type DeadlineRow } from "../lib/reminders.ts";
 
-const prefs = { class_minutes_before: 30, deadline_hours_ahead: [24, 2, 0.5], enabled: true };
+const prefs = { class_minutes_before: 15, deadline_hours_ahead: [24, 2, 0.5], enabled: true };
 
 // 2026-08-19 is a Wednesday. 09:00 UTC = 14:00 in Pakistan.
 const NOW = new Date("2026-08-19T09:00:00Z");
 
 const classes: ClassRow[] = [
-  { id: "c1", course: "Calculus", day_of_week: 3, start_time: "14:20:00", room: "FIT-308" }, // in 20 min
+  { id: "c1", course: "Calculus", day_of_week: 3, start_time: "14:10:00", room: "FIT-308" }, // in 10 min
   { id: "c2", course: "OOP", day_of_week: 3, start_time: "16:00:00", room: "CS-001" }, // in 120 min
-  { id: "c3", course: "Physics", day_of_week: 3, start_time: "13:00:00", room: "LB3-01" }, // already started
+  { id: "c3", course: "Physics", day_of_week: 3, start_time: "13:00:00", room: "LB3-01" }, // started 60 min ago
   { id: "c4", course: "Discrete", day_of_week: 4, start_time: "14:20:00", room: "CS-005" }, // tomorrow
+  { id: "c5", course: "Databases", day_of_week: 3, start_time: "13:52:00", room: "CS-110" }, // started 8 min ago
+  { id: "c6", course: "Networks", day_of_week: 3, start_time: "14:14:00", room: "CS-204" }, // in 14 min
 ];
 
 const deadlines: DeadlineRow[] = [
@@ -37,10 +39,38 @@ const expect = (label: string, pass: boolean) =>
   console.log(`  ${pass ? "PASS" : "FAIL"}  ${label}`);
 
 console.log("\nRules:");
-expect("class 20 min away is reminded", ids.includes("c1"));
-expect("class 2 hours away is not (outside 30 min window)", !ids.includes("c2"));
-expect("class already started is not", !ids.includes("c3"));
+expect("class 10 min away is reminded", ids.includes("c1"));
+expect("class 2 hours away is not (outside the 15 min lead)", !ids.includes("c2"));
+expect("class that started an hour ago is not", !ids.includes("c3"));
 expect("tomorrow's class is not", !ids.includes("c4"));
+
+// The bug this catches: with a strict window, a run that landed a few minutes
+// late skipped the class entirely and it was never announced. On a four-class
+// day that showed up as a single notification.
+expect("class that started 8 min ago still gets a catch-up", ids.includes("c5"));
+expect(
+  "and the catch-up says so rather than pretending it is upcoming",
+  planned.find((p) => p.refId.startsWith("c5"))?.title === "Databases started 8 min ago",
+);
+expect("class 14 min away is reminded", ids.includes("c6"));
+
+// Every class stands alone: three of today's six are inside the band, and all
+// three must be planned. A shared dedupe key would collapse them into one.
+const classCount = planned.filter((p) => p.kind === "class").length;
+expect(`all three in-band classes are planned (got ${classCount})`, classCount === 3);
+expect(
+  "each class has its own dedupe key",
+  new Set(planned.filter((p) => p.kind === "class").map((p) => `${p.refId}|${p.windowKey}`)).size === 3,
+);
+
+// Changing the lead-time preference must not re-open reminders already sent
+// today — the key is per class per day, never per lead time.
+const otherLead = planReminders(NOW, { ...prefs, class_minutes_before: 30 }, classes, deadlines);
+expect(
+  "the dedupe key does not move when the lead time changes",
+  otherLead.find((p) => p.refId.startsWith("c1"))?.windowKey ===
+    planned.find((p) => p.refId.startsWith("c1"))?.windowKey,
+);
 expect("quiz due in 1h is reminded", ids.includes("d1"));
 expect("assignment due in 21h is reminded", ids.includes("d2"));
 expect("deadline 3 days out is not", !ids.includes("d3"));

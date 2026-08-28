@@ -212,14 +212,54 @@
   .chip, .live i { animation: none !important; }
 }
 
-/* ---------- Mobile: no cursor to follow ----------
-   Same reasoning as the landing hero — mousemove never fires on touch, so the
-   deck would sit flat. CSS sways it instead; the JS skips (hover: none) so it
-   doesn't overwrite this with an inline transform. */
+/* ---------- Touch devices: flat, and deliberately so ----------
+
+   This block used to sway the deck in 3D, on the reasoning that mousemove
+   never fires on a phone so the deck would otherwise sit flat. It looked
+   good and it was the cause of the half-black screen on mobile.
+
+   The recipe was: a never-ending animation on an element with preserve-3d and
+   will-change: transform (so the compositor keeps a live GPU layer for it
+   forever), wrapping a panel with backdrop-filter (another layer), sitting
+   beside two elements with filter: blur(40px) over a large area (two more).
+   WebKit re-tiles those layers as the animation runs, and under memory
+   pressure — which a phone reaches far sooner than a laptop — it hands back
+   a tile it never painted. An unpainted tile is black, which is why it was
+   intermittent and why it took out a rectangle rather than the whole page.
+
+   None of that depth survives being viewed at 390px wide anyway, so on touch
+   screens the effects are removed rather than reduced. Desktop is untouched. */
 @media (hover: none) {
+  .stage {
+    perspective: none;
+    padding: 18px 0 26px;
+  }
+
   .deck {
-    animation: deckSway 12s ease-in-out infinite;
+    animation: none;
     transition: none;
+    transform: none;
+    transform-style: flat;
+    /* Releasing this is the point: it tells the compositor it no longer needs
+       to keep a standalone layer alive for an element that never moves. */
+    will-change: auto;
+  }
+
+  /* The panel is 94-96% opaque, so the blur behind it was never visible on a
+     phone — it cost a compositing layer to render nothing. */
+  .panel {
+    backdrop-filter: none;
+  }
+
+  /* Two full-width 40px blurs are the most expensive thing on the page and
+     read as barely-there tint at this size. */
+  .glow,
+  .glowAmber {
+    display: none;
+  }
+
+  .chip {
+    animation: none;
   }
 }
 
