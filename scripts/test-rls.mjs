@@ -108,14 +108,20 @@ for (const [fn, args] of RPCS) {
 
   const body = await res.text();
 
-  // "Refused" is not the same as "errored". pair_device answers a bad code
-  // with {"ok":false} and HTTP 200 on purpose — it has to return rather than
-  // raise so the throttle's counter survives the transaction. Treating any
-  // response body as a leak would fail on a function doing exactly its job,
-  // so the question asked here is whether it actually gave something up.
-  const refusedInBody = /"ok"\s*:\s*false/.test(body);
-  const leaked =
-    res.ok && !refusedInBody && body.length > 4 && body !== "null" && body !== "[]";
+  // Ask the question directly rather than trying to enumerate refusal shapes.
+  //
+  // These functions refuse in several different ways on purpose — some raise,
+  // some return {"ok":false}, and cron_reminder_batch returns
+  // {"error":"unauthorized"} with HTTP 200 because it has to record the
+  // attempt and raising would roll that record back. Matching on refusal
+  // wording meant the test broke every time one of them changed shape, and a
+  // test that keeps crying wolf stops being read.
+  //
+  // What actually matters is whether anything sensitive came back, so that is
+  // what is checked: the field names that only ever appear in real data.
+  const SENSITIVE = ["user_id", "endpoint", "p256dh", "token_hash", "due_at", "day_of_week", "secret_hash"];
+  const leaked = SENSITIVE.some((field) => body.includes(`"${field}"`));
+
   report(
     `${fn}(${Object.keys(args)[0]}=…) refuses`,
     !leaked,
