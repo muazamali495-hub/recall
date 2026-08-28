@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isAllowedEmail } from "@/lib/allowed-email";
+import { safeNextPath } from "@/lib/safe-next";
 
 /**
  * Where Google sends the student back after they approve sign-in.
@@ -17,7 +18,10 @@ import { isAllowedEmail } from "@/lib/allowed-email";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  // Untrusted: appending this to our own origin unchecked is an open
+  // redirect — "@evil.com" makes the origin read as a username and sends the
+  // student to evil.com from a link that starts with our real domain.
+  const next = safeNextPath(searchParams.get("next"));
 
   // Where to send them, honouring the proxy host in production.
   const forwardedHost = request.headers.get("x-forwarded-host");
