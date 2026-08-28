@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { summarise, type CourseVerdict, type UnmarkedClass } from "@/lib/attendance";
-import { markAttendance, saveBaseline } from "./actions";
+import { markAttendance, saveBaseline, saveSemesterStart } from "./actions";
 
 const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
@@ -26,9 +26,11 @@ const TONE = {
 export function AttendanceBoard({
   verdicts,
   unmarked,
+  semesterStart,
 }: {
   verdicts: CourseVerdict[];
   unmarked: UnmarkedClass[];
+  semesterStart: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -65,6 +67,8 @@ export function AttendanceBoard({
 
   return (
     <div className="flex flex-col gap-8">
+      <SemesterStart current={semesterStart} />
+
       {/* ---------- What still needs answering ---------- */}
       {pendingList.length > 0 && (
         <section>
@@ -188,6 +192,103 @@ export function AttendanceBoard({
         </ul>
       </section>
     </div>
+  );
+}
+
+/**
+ * The first day of term.
+ *
+ * Prominent while unset, because until it is set the week-long lookback asks
+ * about holiday dates and any answer to those quietly corrupts the count.
+ * Once set it shrinks to a line of text — it is a fact about the semester, not
+ * something to keep deciding.
+ */
+function SemesterStart({ current }: { current: string | null }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(current ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    startTransition(async () => {
+      const result = await saveSemesterStart(value);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  if (current && !open) {
+    return (
+      <p className="text-xs text-faint">
+        Counting from{" "}
+        <span className="text-muted">
+          {new Intl.DateTimeFormat("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(`${current}T00:00:00Z`))}
+        </span>
+        .{" "}
+        <button
+          onClick={() => setOpen(true)}
+          className="underline-offset-2 transition hover:text-mint hover:underline"
+        >
+          Change
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-violet/25 bg-violet/[0.06] p-5">
+      <p className="mb-1 text-sm font-semibold">When does this semester start?</p>
+      <p className="mb-4 text-sm text-muted">
+        Recall looks back a week so you can catch up on marking. Without a start
+        date that reaches into the holidays and asks about days you had no
+        classes — and those answers would count against you.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="date"
+          required
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-line-2 bg-ground px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-mint"
+        />
+        <button
+          type="submit"
+          disabled={pending || !value}
+          className="rounded-lg bg-mint px-4 py-2 text-sm font-semibold text-[#04231d] transition disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+        {current && (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-lg border border-line-2 px-3 py-2 text-sm font-medium text-muted transition hover:bg-white/5 hover:text-ink"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-amber">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
 

@@ -15,7 +15,7 @@ export default async function AttendancePage() {
 
   const supabase = await createClient();
 
-  const [{ data: classes }, { data: marks }, { data: baselines }] = await Promise.all([
+  const [{ data: classes }, { data: marks }, { data: baselines }, { data: semester }] = await Promise.all([
     supabase
       .from("class_sessions")
       .select("id, course, day_of_week, start_time, room")
@@ -28,13 +28,15 @@ export default async function AttendancePage() {
       .from("attendance_baseline")
       .select("course, attended, held, required_percent")
       .eq("user_id", user.id),
+    supabase.from("semester").select("starts_on, label").eq("user_id", user.id).maybeSingle(),
   ]);
 
   const classRows = (classes ?? []) as ClassRow[];
   const markRows = (marks ?? []) as Mark[];
+  const startsOn = semester?.starts_on ?? null;
 
-  const verdicts = totalsByCourse(classRows, markRows, baselines ?? []).map(judge);
-  const unmarked = findUnmarked(new Date(), classRows, markRows);
+  const verdicts = totalsByCourse(classRows, markRows, baselines ?? [], startsOn).map(judge);
+  const unmarked = findUnmarked(new Date(), classRows, markRows, 7, startsOn);
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-24 pt-10">
@@ -63,7 +65,7 @@ export default async function AttendancePage() {
           </Link>
         </div>
       ) : (
-        <AttendanceBoard verdicts={verdicts} unmarked={unmarked} />
+        <AttendanceBoard verdicts={verdicts} unmarked={unmarked} semesterStart={startsOn} />
       )}
     </main>
   );

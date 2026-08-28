@@ -61,6 +61,47 @@ export async function clearAttendance(classId: string, onDate: string): Promise<
 }
 
 /**
+ * Records the first day of term.
+ *
+ * Without it the week-long lookback reaches into the holidays and asks about
+ * days that had no classes — and any answer to those pollutes the number that
+ * decides whether the student sits their exams.
+ */
+export async function saveSemesterStart(startsOn: string, label?: string): Promise<MarkResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn)) return { ok: false, error: "Pick a date." };
+
+  const when = new Date(`${startsOn}T00:00:00Z`);
+  if (Number.isNaN(when.getTime())) return { ok: false, error: "That isn't a real date." };
+
+  // A semester is months, not years. A typo of 2016 for 2026 would silently
+  // widen every lookback and quietly break the counts.
+  const monthsAway = Math.abs(Date.now() - when.getTime()) / (30 * 86_400_000);
+  if (monthsAway > 12) {
+    return { ok: false, error: "That's more than a year away — check the date." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("semester").upsert(
+    {
+      user_id: user.id,
+      starts_on: startsOn,
+      label: label?.trim() || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (error) return { ok: false, error: "Could not save that." };
+
+  revalidatePath("/attendance");
+  return { ok: true };
+}
+
+/**
  * Sets where a course already stood before Recall started counting.
  *
  * `held` is the number of classes that actually happened, `attended` how many

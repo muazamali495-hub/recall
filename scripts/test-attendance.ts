@@ -161,5 +161,48 @@ const NOW = new Date("2026-08-28T09:00:00Z");
   expect("  but not a fortnight back", !dates.has("2026-08-14"));
 }
 
+console.log("\nSemester start:\n");
+
+// Term begins Monday 31 August. NOW is Friday 28 August, so every class the
+// lookback would find belongs to the holidays.
+{
+  const unmarked = findUnmarked(NOW, classes, [], 7, "2026-08-31");
+  expect("nothing before term is asked about", unmarked.length === 0, `got ${unmarked.length}`);
+}
+
+{
+  // Wednesday 2 September, 14:00 PKT — term is two days old.
+  const inTerm = new Date("2026-09-02T09:00:00Z");
+  const monday: ClassRow[] = [
+    { id: "c9", course: "Operating Systems", day_of_week: 1, start_time: "08:00:00", room: "FIT-308" },
+  ];
+
+  const unmarked = findUnmarked(inTerm, monday, [], 7, "2026-08-31");
+  expect("the first Monday of term IS asked about", unmarked.some((u) => u.onDate === "2026-08-31"));
+  expect("  and the Monday before term is not", !unmarked.some((u) => u.onDate === "2026-08-24"));
+}
+
+{
+  // Someone marked a holiday date before setting the start date. Fixing the
+  // date has to undo what that answer did, not merely stop asking.
+  const totals = totalsByCourse(
+    classes,
+    [
+      { class_id: "c1", on_date: "2026-08-21", status: "absent" },
+      { class_id: "c1", on_date: "2026-09-04", status: "present" },
+    ],
+    [],
+    "2026-08-31",
+  );
+  const os = totals.find((t) => t.course === "Operating Systems")!;
+  expect("a mark from before term stops counting", os.attended === 1 && os.held === 1, `got ${os.attended}/${os.held}`);
+}
+
+{
+  const totals = totalsByCourse(classes, [{ class_id: "c1", on_date: "2026-08-21", status: "present" }], []);
+  const os = totals.find((t) => t.course === "Operating Systems")!;
+  expect("with no start date set, nothing is filtered", os.held === 1);
+}
+
 console.log(failures === 0 ? "\nAll passed.\n" : `\n${failures} FAILED.\n`);
 process.exitCode = failures === 0 ? 0 : 1;

@@ -124,6 +124,8 @@ export function findUnmarked(
   classes: ClassRow[],
   marks: Mark[],
   daysBack = 7,
+  /** First day of term, "YYYY-MM-DD". Nothing before it is a real class. */
+  semesterStart?: string | null,
 ): UnmarkedClass[] {
   const done = new Set(marks.map((m) => `${m.class_id}:${m.on_date}`));
   const out: UnmarkedClass[] = [];
@@ -132,6 +134,10 @@ export function findUnmarked(
     const local = new Date(now.getTime() + PKT_OFFSET_MS - back * 86_400_000);
     const weekday = local.getUTCDay();
     const onDate = local.toISOString().slice(0, 10);
+
+    // ISO dates compare correctly as strings, which is the whole reason to
+    // keep them in this shape rather than parsing back to Date objects.
+    if (semesterStart && onDate < semesterStart) continue;
 
     for (const c of classes) {
       if (c.day_of_week !== weekday) continue;
@@ -169,6 +175,12 @@ export function totalsByCourse(
   classes: ClassRow[],
   marks: Mark[],
   baselines: Array<{ course: string; attended: number; held: number; required_percent: number }>,
+  /**
+   * First day of term. Marks before it are dropped rather than counted — if a
+   * student sets the date after already marking a few holiday dates, the fix
+   * has to clean up what those answers did, not just stop asking.
+   */
+  semesterStart?: string | null,
 ): CourseTotals[] {
   const byId = new Map(classes.map((c) => [c.id, c.course]));
   const totals = new Map<string, { attended: number; held: number; required: number }>();
@@ -193,6 +205,8 @@ export function totalsByCourse(
   }
 
   for (const mark of marks) {
+    if (semesterStart && mark.on_date < semesterStart) continue;
+
     const course = byId.get(mark.class_id);
     if (!course) continue; // the class was deleted; its marks mean nothing now
 
