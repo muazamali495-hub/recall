@@ -5,6 +5,8 @@ import { ConnectSwitch } from "./connect-switch";
 // manifest so it can never drift from what is actually packaged — the page
 // compares it against what the installed extension reports.
 import extensionManifest from "../../../extension/manifest.json";
+import { DeviceList, type Device } from "./device-list";
+import { Activity } from "./activity";
 
 export default async function ConnectPage() {
   const supabase = await createClient();
@@ -16,7 +18,7 @@ export default async function ConnectPage() {
   const [{ data: devices }, { count: deadlineCount }] = await Promise.all([
     supabase
       .from("sync_devices")
-      .select("id, label, last_seen_at")
+      .select("id, label, last_seen_at, created_at")
       .order("created_at", { ascending: false }),
     supabase
       .from("deadlines")
@@ -56,29 +58,10 @@ export default async function ConnectPage() {
         latestExtensionVersion={extensionManifest.version}
       />
 
-      {linked && devices && (
-        <section className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold text-muted">Linked browsers</h2>
-          <ul className="flex flex-col gap-2">
-            {devices.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm"
-              >
-                <span>{d.label ?? "Browser"}</span>
-                <span className="text-xs text-faint">
-                  {d.last_seen_at
-                    ? `synced ${new Date(d.last_seen_at).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                      })}`
-                    : "never synced"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {linked && devices && <DeviceList devices={devices as Device[]} />}
+
+      <Activity />
+
     </main>
   );
 }

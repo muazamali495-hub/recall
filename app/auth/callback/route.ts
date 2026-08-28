@@ -48,6 +48,18 @@ export async function GET(request: Request) {
   const email = data.user?.email ?? null;
 
   if (!isAllowedEmail(email)) {
+    // Recorded before the account is undone, while there is still a session to
+    // write it under. Only the domain: the address itself belongs to someone
+    // who was refused, and keeping it would be collecting data on strangers.
+    await supabase
+      .rpc("log_signin_refused", { p_domain: email?.split("@")[1]?.slice(0, 60) ?? "unknown" })
+      .then(
+        () => {},
+        () => {
+          // A missing audit line must never be the reason a rejection fails.
+        },
+      );
+
     // Supabase has already created the account by this point, so rejecting
     // them means undoing it — otherwise every stranger who tries the link
     // leaves a permanent row behind.
