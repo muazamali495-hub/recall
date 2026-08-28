@@ -13,7 +13,26 @@ export async function renderPdfPages(bytes: Buffer, maxPages = 3): Promise<strin
   const { pdf } = await import("pdf-to-img");
 
   // scale 2 keeps small grid text legible without ballooning the payload.
-  const document = await pdf(bytes, { scale: 2 });
+  const document = await pdf(bytes, {
+    scale: 2,
+
+    // npm audit flags this pdfjs version for GHSA-hq66-cqwq-w95j: a malicious
+    // PDF executing JavaScript when `enableScripting` is on. Uploads come from
+    // students and could come from anywhere, so it is worth being precise
+    // about why that advisory does not reach this code.
+    //
+    // enableScripting is not a document-loading option at all — it belongs to
+    // the annotation layer, and TypeScript rejects it here, which is better
+    // evidence than reading the source. Executing a PDF's JavaScript needs the
+    // viewer: an annotation layer plus a scripting manager. Rasterising calls
+    // getDocument, getPage and render, and nothing else.
+    //
+    // isEvalSupported IS a load option, and closes the older font-program
+    // eval() path. pdf-to-img already forces it false — after spreading these
+    // options, so it cannot be turned back on by mistake — but stating it here
+    // keeps the intent if that dependency ever stops doing it.
+    docInitParams: { isEvalSupported: false },
+  });
 
   const pages: string[] = [];
   for await (const page of document) {

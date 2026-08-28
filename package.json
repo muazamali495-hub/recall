@@ -18,6 +18,7 @@
     "test:attendance": "node --import ./scripts/register.mjs scripts/test-attendance.ts",
     "test:safe-next": "node --import ./scripts/register.mjs scripts/test-safe-next.ts",
     "test:csp": "node --import ./scripts/register.mjs scripts/test-csp.ts",
+    "test:rls": "node --env-file=.env.local scripts/test-rls.mjs",
     "test:extension": "node scripts/test-extension.mjs",
     "test:planner": "node --import ./scripts/register.mjs --env-file=.env.local scripts/test-planner.ts",
     "test:ask": "node --import ./scripts/register.mjs --env-file=.env.local scripts/test-ask.ts",

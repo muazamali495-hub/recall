@@ -46,6 +46,18 @@ export async function extractTimetableAction(
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
+  // file.type is whatever the browser said, and the browser is the caller.
+  // Anything routed to the PDF parser has to actually be a PDF, so the
+  // decision is made from the bytes rather than from a claim about them.
+  const looksLikePdf = bytes.subarray(0, 5).toString("latin1") === "%PDF-";
+
+  if (file.type === "application/pdf" && !looksLikePdf) {
+    return { error: "That doesn't look like a PDF. Try exporting it again.", section };
+  }
+  if (looksLikePdf && file.type !== "application/pdf") {
+    return { error: "That's a PDF — upload it as one, or send a photo instead.", section };
+  }
+
   try {
     // A PDF grid has to be seen, not read — its text layer has no times in it.
     //
