@@ -60,25 +60,33 @@ export function explainFailure(result) {
   return `Slate returned ${result.status}. Copy a fresh calendar link from Slate.`;
 }
 
-function waitForLoad(tabId, timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const poll = setInterval(async () => {
-      let tab;
-      try {
-        tab = await chrome.tabs.get(tabId);
-      } catch {
-        clearInterval(poll);
-        return reject(new Error("Slate tab closed before it finished loading."));
-      }
-      if (tab.status === "complete") {
-        clearInterval(poll);
-        return resolve();
-      }
-      if (Date.now() - started > timeoutMs) {
-        clearInterval(poll);
-        return reject(new Error("Slate took too long to load."));
-      }
-    }, 300);
-  });
+/**
+ * A short, pasteable summary of what actually came back.
+ *
+ * The advice above is a best guess from patterns we have seen. When it guesses
+ * wrong the student has nothing to report but "it still says refused", and we
+ * are back to speculating. This is the line that ends that: status, where the
+ * request landed, and the first words of the body.
+ */
+export function technicalTail(result) {
+  const bits = [`HTTP ${result.status ?? "?"}`];
+
+  if (result.finalUrl) {
+    try {
+      bits.push(new URL(result.finalUrl).pathname);
+    } catch {
+      bits.push(result.finalUrl.slice(0, 60));
+    }
+  }
+
+  const body = (result.detail ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (body) bits.push(`"${body.slice(0, 90)}"`);
+  else if (result.error) bits.push(result.error.slice(0, 60));
+  else bits.push("empty body");
+
+  return ` [${bits.join(" · ")}]`;
 }

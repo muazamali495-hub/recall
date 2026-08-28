@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Recall — Slate Sync",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Keeps your Slate quiz and assignment deadlines in sync with Recall.",
   "permissions": [
     "storage",

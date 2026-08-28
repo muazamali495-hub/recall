@@ -1,5 +1,5 @@
 import { RECALL_ORIGIN, SYNC_PERIOD_MINUTES, REMINDER_PERIOD_MINUTES } from "./config.js";
-import { explainFailure } from "./diagnose.js";
+import { explainFailure, technicalTail } from "./diagnose.js";
 
 const ALARM = "recall-sync";
 const REMINDER_ALARM = "recall-reminders";
@@ -155,11 +155,42 @@ function fetchInPage(url) {
     .catch((e) => ({ ok: false, status: 0, text: "", detail: "", error: String(e) }));
 }
 
+function waitForLoad(tabId, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const poll = setInterval(async () => {
+      let tab;
+      try {
+        tab = await chrome.tabs.get(tabId);
+      } catch {
+        clearInterval(poll);
+        return reject(new Error("Slate tab closed before it finished loading."));
+      }
+      if (tab.status === "complete") {
+        clearInterval(poll);
+        return resolve();
+      }
+      if (Date.now() - started > timeoutMs) {
+        clearInterval(poll);
+        return reject(new Error("Slate took too long to load."));
+      }
+    }, 300);
+  });
+}
+
 /** Runs inside the Slate tab. Must be self-contained — it is serialised across. */
 function probePage() {
   return {
     url: location.href,
     challenged: /just a moment|checking your browser|attention required/i.test(document.title),
+    // "Not showing a challenge" is not the same as "showing Moodle" — an
+    // interstitial that has started redirecting is neither. Moodle puts these
+    // on every page it serves, so their presence means the real site arrived.
+    isMoodle: Boolean(
+      document.getElementById("page") ||
+        document.body?.className?.includes("moodle") ||
+        document.querySelector('meta[name="keywords"][content*="moodle"]'),
+    ),
   };
 }
 
@@ -170,17 +201,27 @@ function probePage() {
  * is a fully loaded page, just not the one we want. Injecting at that moment
  * fetches from a context Cloudflare has not cleared yet, which comes back 403
  * and looks exactly like being signed out.
+ *
+ * Background tabs make this worse: Chrome throttles their timers to about one
+ * a second, and Cloudflare's check leans on timers, so a tab opened out of
+ * sight clears far more slowly than one the student opened themselves. That is
+ * the whole reason syncing worked with Slate on screen and failed without it.
  */
-async function waitPastCloudflare(tabId, timeoutMs = 20000) {
+async function waitForSlateReady(tabId, timeoutMs = 30000) {
   const started = Date.now();
+  let last = null;
 
   for (;;) {
-    const [probe] = await chrome.scripting.executeScript({ target: { tabId }, func: probePage });
-    const page = probe?.result;
+    const [probe] = await chrome.scripting
+      .executeScript({ target: { tabId }, func: probePage })
+      .catch(() => []);
 
-    if (!page) return null;
-    if (!page.challenged) return page;
-    if (Date.now() - started > timeoutMs) return page;
+    last = probe?.result ?? last;
+
+    // Signed out is a final answer — waiting longer will not change it.
+    if (last?.url?.includes("/login/")) return last;
+    if (last && !last.challenged && last.isMoodle) return last;
+    if (Date.now() - started > timeoutMs) return last;
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -191,44 +232,68 @@ async function fetchIcsViaSlate(icalUrl) {
   const open = await chrome.tabs.query({ url: `${SLATE_ORIGIN}/*` });
 
   let tabId = open[0]?.id;
-  let temporary = false;
+  const temporary = !tabId;
 
-  if (!tabId) {
-    const tab = await chrome.tabs.create({ url: `${SLATE_ORIGIN}/my/`, active: false });
+  if (temporary) {
+    // The calendar page rather than /my/: it is the page that owns this data,
+    // so the fetch is the same request its own "export" button would make.
+    const tab = await chrome.tabs.create({
+      url: `${SLATE_ORIGIN}/calendar/view.php?view=month`,
+      active: false,
+    });
     tabId = tab.id;
-    temporary = true;
     await waitForLoad(tabId);
   }
 
   try {
-    const page = await waitPastCloudflare(tabId);
+    const page = await waitForSlateReady(tabId);
 
     // Caught before the fetch, because "you are signed out" is a far more
     // useful thing to be told than "403".
     if (page?.url?.includes("/login/")) {
       throw new Error("You're signed out of Slate. Open Slate, log in, then try again.");
     }
-    if (page?.challenged) {
+    if (page && page.challenged) {
       throw new Error(
         "Cloudflare is still checking the browser. Open Slate in a tab, wait for it to load, then try again.",
       );
     }
 
-    const [injection] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: fetchInPage,
-      args: [icalUrl],
-    });
+    let result = await runFetch(tabId, icalUrl);
 
-    const result = injection?.result;
+    // One retry, only for a tab we opened ourselves. Clearance for a
+    // background tab can land a moment after the page looks settled, and a
+    // second attempt costs Slate one request rather than costing the student
+    // a day of missed deadlines.
+    if (result && !result.ok && temporary && result.status === 403) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      result = await runFetch(tabId, icalUrl);
+    }
+
     if (!result) throw new Error("Could not run inside Slate. Try opening Slate in a tab.");
 
-    if (!result.ok) throw new Error(explainFailure(result));
+    if (!result.ok) {
+      // Cloudflare treats a tab the student opened very differently from one
+      // opened out of sight, so when the hidden route fails, say the thing
+      // that actually works instead of leaving them to discover it.
+      const advice = temporary
+        ? " Opening Slate in a tab and pressing Check now works — Cloudflare is stricter with pages you didn't open yourself."
+        : "";
+      throw new Error(explainFailure(result) + advice + technicalTail(result));
+    }
 
     return result.text;
   } finally {
     if (temporary) await chrome.tabs.remove(tabId).catch(() => {});
   }
+}
+
+async function runFetch(tabId, icalUrl) {
+  const [injection] = await chrome.scripting
+    .executeScript({ target: { tabId }, func: fetchInPage, args: [icalUrl] })
+    .catch(() => []);
+
+  return injection?.result ?? null;
 }
 
 export async function syncNow() {
