@@ -31,7 +31,8 @@ Browser extension ──► fetches your Slate calendar from inside a real Slate
 Timetable upload ──► PDF/photo rendered to images ──► vision model reads the grid
                  ──► you review and correct ──► saved
 
-Web Push ──► reminders before class, and 24h / 2h / 30min before each deadline
+Web Push ──► 15 min before each class, and 24h / 2h / 30min before each deadline
+         ──► fired by pg_cron every 5 min, with GitHub Actions as a backup
 ```
 
 ### The Cloudflare problem, and why there's an extension
@@ -73,14 +74,26 @@ useless, so the rule is enforced in code, not in the prompt.
 dense grids, so every extracted class is editable before it's saved. Wrong times mean
 wrong reminders — the one thing this app cannot get wrong.
 
-**A late reminder still goes out.** Class alerts are driven by GitHub Actions,
-whose scheduler is best-effort — a run booked for every few minutes can arrive
-twenty minutes late or be dropped entirely. The original rule only fired if a
-run landed inside the lead window, so a delayed run meant the class was never
-announced at all; a four-class day produced one notification. Now a reminder up
-to 20 minutes late is still sent, worded honestly ("Databases started 8 min
-ago"), and the workflow keeps a worker alive pinging on its own timer instead
-of trusting the schedule.
+**The database drives the clock, not GitHub.** Reminders used to be triggered
+by a GitHub Actions `schedule:` asking for a run every ten minutes. What it
+actually got: ~30 runs on 26 Aug, **three** on 27 Aug, one on 28 Aug. GitHub
+documents `schedule:` as best-effort and drops it under load, and a
+fifteen-minute class reminder cannot survive a ten-hour gap — that alone
+explains a four-class day producing one notification. `pg_cron` now fires the
+same endpoint every five minutes from inside Postgres, where nothing
+deprioritises it. The workflow stays as a second trigger, looping on its own
+timer rather than trusting the schedule; reminders are claimed before sending,
+so two triggers can never double-send.
+
+The job needs a bearer token, and `CRON_SECRET` cannot live in a public repo —
+so the database mints its own, keeps the plaintext in Supabase Vault, and
+registers the hash alongside GitHub's. Nothing secret is typed or pasted, and
+either trigger can be revoked without touching the other.
+
+**A late reminder still goes out.** Even so, a trigger can arrive late. The old
+rule only fired if a run landed inside the lead window, so a delayed run meant
+the class was never announced at all. A reminder up to 20 minutes late is now
+sent anyway, worded honestly — "Databases started 8 min ago" beats silence.
 
 **No free model is dependable, so they are raced.** Availability moves by the
 minute — one pool returned a clean study plan and a `402` three minutes later,
