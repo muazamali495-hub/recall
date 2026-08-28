@@ -26,19 +26,20 @@ type Batch = Array<{
  * Called on a schedule by .github/workflows/reminders.yml.
  */
 export async function POST(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "CRON_SECRET is not configured." }, { status: 500 });
-  }
-
   const header = request.headers.get("authorization") ?? "";
-  const provided = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+  const secret = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
 
-  // Constant-time-ish: compare lengths first so a short guess can't be
-  // distinguished by timing alone.
-  if (provided.length !== secret.length || provided !== secret) {
+  if (!secret) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  // The token is not checked against CRON_SECRET here. There are two callers
+  // now — the GitHub workflow, and pg_cron inside the database — and pg_cron
+  // mints its own token precisely so that no secret has to be typed into a
+  // repository or a dashboard. Both are registered in job_secrets, and
+  // cron_reminder_batch below verifies against that table and refuses anything
+  // else. Moving the check there means the database is the single authority
+  // rather than one of two places that have to agree.
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
@@ -60,6 +61,13 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.rpc("cron_reminder_batch", { p_secret: secret });
 
   if (error) {
+    // 28000 is what verify_job_secret raises for a token it does not know.
+    // Reporting it as 401 keeps a bad credential distinguishable from a
+    // database that is genuinely broken.
+    if (error.code === "28000" || /bad job secret/i.test(error.message)) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     console.error("[cron] batch failed:", error.message);
     return NextResponse.json({ error: "Could not load reminder batch." }, { status: 500 });
   }
