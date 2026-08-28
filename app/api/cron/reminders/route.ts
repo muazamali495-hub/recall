@@ -72,6 +72,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not load reminder batch." }, { status: 500 });
   }
 
+  // A refusal now arrives as a value rather than an exception: the batch has
+  // to record a bad secret and count it against the rate limit, and raising
+  // would roll both of those back along with the transaction.
+  if (data && !Array.isArray(data)) {
+    const refusal = data as { error?: string };
+
+    if (refusal.error === "throttled") {
+      return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+    }
+
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const batch = (data ?? []) as Batch;
   const now = new Date();
 
