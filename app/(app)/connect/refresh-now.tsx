@@ -201,6 +201,20 @@ export function RefreshNow({
           <p className={`text-xs ${phase === "failed" ? "text-amber" : "text-mint"}`}>{message}</p>
         )}
       </div>
+
+      {/* The one setting that gets closest to "syncs without me doing
+          anything". Chrome's alarms stop the moment Chrome does, so with every
+          window closed the six-hour check simply never runs. Background mode
+          keeps the process alive and the alarms firing.
+
+          Written as text, not a link: Chrome refuses to navigate to a
+          chrome:// URL from a web page, so a link here would look broken. */}
+      <p className="mt-3 text-xs text-faint">
+        To keep checking with no Chrome window open, turn on{" "}
+        <span className="text-muted">Continue running background apps when Google Chrome is closed</span>{" "}
+        in <code className="text-muted">chrome://settings/system</code>. The computer still has to
+        be awake — Slate can only be read from a real browser.
+      </p>
     </>
   );
 }
