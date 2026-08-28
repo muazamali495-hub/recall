@@ -35,8 +35,16 @@ export async function POST(request: Request) {
   let events;
   try {
     events = parseIcs(ics);
-  } catch {
-    return NextResponse.json({ error: "Could not read that calendar." }, { status: 400, headers: CORS_HEADERS });
+  } catch (err) {
+    // The event cap explains itself — "that calendar has 4,300 events" tells a
+    // student to check their link, where "could not read that calendar" sends
+    // them to re-copy a link that was never the problem.
+    const message =
+      err instanceof Error && /far more than a semester/.test(err.message)
+        ? err.message
+        : "Could not read that calendar.";
+
+    return NextResponse.json({ error: message }, { status: 400, headers: CORS_HEADERS });
   }
 
   const supabase = createClient(

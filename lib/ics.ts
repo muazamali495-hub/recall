@@ -147,9 +147,31 @@ function mergeOpenClosePairs(items: ParsedDeadline[]): ParsedDeadline[] {
  * Turns raw .ics text into deadline rows.
  * Events without a UID are skipped — we need it to de-duplicate on re-sync.
  */
+/**
+ * How many events a calendar may contain.
+ *
+ * The raw feed is capped at 2MB, but a minimal VEVENT is about 200 bytes, so
+ * that alone allows roughly ten thousand deadlines from a single sync — enough
+ * to fill a free-tier database and take Recall down for everyone.
+ *
+ * A thousand is far beyond any real semester. The busiest account on this
+ * system holds twelve.
+ */
+export const MAX_EVENTS = 1000;
+
 export function parseIcs(icsText: string): ParsedDeadline[] {
   const comp = new ICAL.Component(ICAL.parse(icsText));
   const events = comp.getAllSubcomponents("vevent");
+
+  // Refused, not truncated. Quietly keeping the first thousand would hide
+  // which of the two things is happening — a broken feed, or someone finding
+  // out how much they can push in — and a student whose deadlines silently
+  // stopped appearing would have no way to tell.
+  if (events.length > MAX_EVENTS) {
+    throw new Error(
+      `That calendar has ${events.length} events, far more than a semester holds. Check the link exports your own calendar rather than the whole site.`,
+    );
+  }
 
   const out: ParsedDeadline[] = [];
 
