@@ -34,6 +34,36 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 /**
+ * Sync when the machine comes back to life.
+ *
+ * A six-hour alarm only fires while Chrome is actually running, and onStartup
+ * only fires on a cold start — close the lid at night and reopen it in the
+ * morning and neither happens, because Chrome never stopped. That is how a
+ * "checks every six hours" sync ends up twenty hours stale.
+ *
+ * Returning to the keyboard is the moment a fresh answer starts mattering, so
+ * that is when to look.
+ */
+chrome.idle.onStateChanged.addListener((state) => {
+  if (state !== "active") return;
+  syncIfStale().catch(() => {});
+});
+
+/**
+ * Syncs only if the last successful one is old enough to be worth redoing.
+ *
+ * Without the floor this would fire every time the student walked back to
+ * their laptop — Slate would see a burst of requests for no new information,
+ * which is exactly the kind of traffic that gets an app blocked.
+ */
+async function syncIfStale(maxAgeMinutes = 60) {
+  const { lastSyncAt } = await chrome.storage.local.get("lastSyncAt");
+  if (lastSyncAt && Date.now() - lastSyncAt < maxAgeMinutes * 60_000) return null;
+
+  return syncNow();
+}
+
+/**
  * Asks Recall whether anything is due. The server decides what to send and
  * records it, so running this often is harmless — a reminder already sent is
  * never sent twice.
@@ -55,6 +85,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         .then((result) => sendResponse({ ok: true, ...result }))
         .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true; // keep the channel open for the async reply
+
+    // Opening Recall is the moment the student wants current deadlines, and
+    // it is a far better trigger than a timer that only ticks while Chrome
+    // happens to be open. Rate-limited so a page refresh is not a Slate fetch.
+    case "SYNC_IF_STALE":
+      syncIfStale()
+        .then((result) =>
+          sendResponse(result ? { ok: true, synced: true, ...result } : { ok: true, synced: false }),
+        )
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
 
     // The website mints a device token once the student is signed in and
     // hands it over, so nobody has to copy a pairing code by hand.
@@ -195,6 +236,9 @@ export async function syncNow() {
     throw new Error(message);
   }
 
+  // Recorded here rather than on every attempt: this is the timestamp the
+  // staleness check reads, and a failed fetch has not refreshed anything.
+  await chrome.storage.local.set({ lastSyncAt: Date.now() });
   await setStatus({ ok: true, message: `Synced ${data.parsed ?? 0} events.` });
   return data;
 }

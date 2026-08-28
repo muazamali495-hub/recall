@@ -322,7 +322,7 @@ export function ExtensionConnect({ installUrl }: { installUrl: string | null }) 
             : "Slate is connected."}
         </p>
         <p className="mb-4 text-sm text-muted">
-          Your deadlines refresh every six hours from here on. Nothing else to do.
+          Recall checks Slate every six hours while Chrome is open here, and again whenever you open Recall on this computer.
         </p>
         <button
           onClick={() => {

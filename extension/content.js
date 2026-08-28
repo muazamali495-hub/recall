@@ -45,6 +45,12 @@ window.addEventListener("message", (event) => {
     case "SYNC_NOW":
       chrome.runtime.sendMessage({ type: "SYNC_NOW" }, (res) => reply(msg.type, res));
       break;
+
+    // Fired when the student opens Recall. The background script decides
+    // whether it is actually due, so refreshing the page costs Slate nothing.
+    case "SYNC_IF_STALE":
+      chrome.runtime.sendMessage({ type: "SYNC_IF_STALE" }, (res) => reply(msg.type, res));
+      break;
   }
 });
 

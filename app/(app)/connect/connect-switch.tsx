@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AndroidConnect, useIsRecallApp } from "./android-connect";
 import { ExtensionConnect } from "./extension-connect";
 import { PairingCode } from "./pairing-code";
+import { RefreshNow } from "./refresh-now";
 
 function ago(iso: string | null): string {
   if (!iso) return "not yet";
@@ -68,10 +69,19 @@ export function ConnectSwitch({
             ) : null}
           </p>
 
+          {/* Naming the dependency rather than leaving "20 hours ago" to be
+              read as a broken promise. Slate sits behind Cloudflare, so the
+              fetch has to happen inside a real browser on a real machine —
+              which means it cannot run while that machine is asleep. */}
           <p className="mt-4 text-xs text-faint">
             This is set up once per account, not per device — your deadlines show
-            on every device you sign in on, including this one.
+            on every device you sign in on, including this one. Slate itself can
+            only be checked while Chrome is open on the computer holding the
+            link, so the gap between checks stretches whenever that computer is
+            closed.
           </p>
+
+          <RefreshNow lastSyncedAt={lastSyncedAt} />
         </div>
 
         <button
