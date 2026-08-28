@@ -114,7 +114,6 @@ export function Landing() {
               Recall{" "}
               <small>
                 for UOL
-                {/* Hidden on the narrowest screens, where the nav is already tight. */}
                 <span className={s.byline}> · by Muazzam Ali</span>
               </small>
             </span>

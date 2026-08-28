@@ -345,13 +345,49 @@
   border-bottom-color: var(--mint);
 }
 
-/* Author byline in the nav. Dropped below 560px, where the brand and the
-   CTA button already compete for the row. */
+/* Author byline in the nav.
+   It used to be hidden below 560px, on the reasoning that the brand and the
+   CTA button already compete for that row — but hiding the credit on the one
+   device most people open the site with is the wrong trade. It gets its own
+   line instead, with the tracking and size wound back so "FOR UOL · BY
+   MUAZZAM ALI" still clears the button on a 375px screen. */
 .byline {
   white-space: nowrap;
 }
+
 @media (max-width: 560px) {
-  .byline { display: none; }
+  .brand small {
+    display: block;
+    margin-left: 0;
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+    line-height: 1.35;
+  }
+  .brand {
+    align-items: center;
+    gap: 9px;
+    font-size: 1.02rem;
+  }
+}
+
+/* At 320px — the narrowest phone still in real use — the brand and the button
+   met with nothing between them. Nothing overflowed, but touching is not
+   spacing. The slack is in the nav's own padding rather than in the credit. */
+@media (max-width: 380px) {
+  .nav .wrap {
+    padding: 0 14px;
+  }
+  .navIn .btn {
+    padding: 10px 14px;
+    font-size: 0.88rem;
+  }
+  .brand {
+    gap: 8px;
+    font-size: 0.96rem;
+  }
+  .brand small {
+    font-size: 0.55rem;
+  }
 }
 
 /* Brand mark. The logo is a rounded badge already, so it only needs a matching

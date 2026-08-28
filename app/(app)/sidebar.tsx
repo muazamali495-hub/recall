@@ -64,11 +64,25 @@ const ITEMS: Item[] = [
   },
 ];
 
-const Brand = () => (
+/**
+ * `byline` is for the mobile top bar only. The desktop sidebar carries the
+ * credit at its foot, but that whole sidebar is lg:flex — so on a phone there
+ * was nowhere it appeared at all.
+ */
+const Brand = ({ byline = false }: { byline?: boolean }) => (
   <Link href="/dashboard" className="flex items-center gap-2.5 px-2 font-bold tracking-tight">
     {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size brand mark */}
     <img src="/logo.png" alt="" width={26} height={26} className="rounded-[22%]" aria-hidden="true" />
-    Recall
+    {byline ? (
+      <span className="flex flex-col leading-tight">
+        Recall
+        <span className="text-[0.6rem] font-medium uppercase tracking-[0.04em] text-faint">
+          by Muazzam Ali
+        </span>
+      </span>
+    ) : (
+      "Recall"
+    )}
   </Link>
 );
 
@@ -133,7 +147,7 @@ export function Sidebar({ name, email }: { name: string | null; email: string })
           from. Against a 90%-opaque background the blur was doing almost
           nothing visible anyway. */}
       <div className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-line bg-ground px-4 lg:hidden">
-        <Brand />
+        <Brand byline />
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Close menu" : "Open menu"}
