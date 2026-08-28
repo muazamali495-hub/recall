@@ -5,6 +5,7 @@
   "description": "AI student assistant for University of Lahore",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/package-extension.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
