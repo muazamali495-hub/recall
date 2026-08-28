@@ -44,6 +44,16 @@ const ITEMS: Item[] = [
     ),
   },
   {
+    href: "/attendance",
+    label: "Attendance",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <rect x="3" y="4" width="14" height="13" rx="3" stroke="currentColor" {...stroke} />
+        <path d="M7 10.4l2 2 4-4" stroke="currentColor" {...stroke} />
+      </svg>
+    ),
+  },
+  {
     href: "/connect",
     label: "Slate",
     icon: (
