@@ -10,6 +10,7 @@ import {
 } from "./actions";
 import type { ExtractedClass } from "@/lib/vision";
 import { Working } from "../working";
+import { shrinkImage } from "@/lib/shrink-image";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -195,7 +196,27 @@ export function TimetableUpload() {
         accept="image/png,image/jpeg,image/webp,application/pdf"
         required
         className="sr-only"
-        onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+        onChange={async (e) => {
+          const chosen = e.target.files?.[0];
+          if (!chosen) {
+            setFileName(null);
+            return;
+          }
+
+          setFileName(chosen.name);
+
+          // Shrink before the form is submitted, not during. A phone photo is
+          // routinely 3-5MB of detail the model does not need, and sending it
+          // costs the student upload time on a mobile connection.
+          const smaller = await shrinkImage(chosen);
+
+          if (smaller !== chosen) {
+            const box = new DataTransfer();
+            box.items.add(smaller);
+            e.target.files = box.files;
+            setFileName(`${chosen.name} (${Math.round(smaller.size / 1024)} KB)`);
+          }
+        }}
       />
 
       {extracting && (

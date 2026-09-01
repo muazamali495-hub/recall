@@ -47,6 +47,24 @@ const nextConfig: NextConfig = {
   // The default advertises the exact framework and version to anyone probing.
   poweredByHeader: false,
 
+  experimental: {
+    serverActions: {
+      /**
+       * Server Actions cap request bodies at 1MB by default, and Next rejects
+       * the request before the action runs — so the upload form's own 8MB
+       * check never got a chance to produce a friendly message. A photo of a
+       * timetable from a phone is routinely 2-5MB, which meant a plain
+       * "server error" page with no explanation.
+       *
+       * 9mb, not 8: the limit applies to the whole multipart body, and the
+       * boundaries and part headers add a little on top of the file itself.
+       * Leaving no headroom would reject a file that is legitimately under
+       * the size the form promises to accept.
+       */
+      bodySizeLimit: "9mb",
+    },
+  },
+
   async headers() {
     return [
       {
