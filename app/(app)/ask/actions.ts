@@ -3,6 +3,7 @@
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { buildMessages, type StudentContext } from "@/lib/ask";
 import { callChat, LlmNotConfigured } from "@/lib/llm";
+import { findPassages, passagesPrompt } from "@/lib/rag";
 import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -101,7 +102,15 @@ export async function askAction(
   };
 
   try {
-    const answer = await callChat(buildMessages(ctx, history, trimmed));
+    // Look for anything in the document library that bears on the question.
+    // Usually there is nothing — most questions are about the student's own
+    // week, which the context above already covers — and in that case this is
+    // an empty string and the behaviour is exactly as before.
+    const passages = await findPassages(trimmed);
+
+    const answer = await callChat(
+      buildMessages(ctx, history, trimmed, passagesPrompt(passages)),
+    );
     return { answer };
   } catch (err) {
     if (err instanceof LlmNotConfigured) {

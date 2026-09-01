@@ -69,9 +69,16 @@ export function buildMessages(
   ctx: StudentContext,
   history: Array<{ role: "user" | "assistant"; content: string }>,
   question: string,
+  /**
+   * Passages retrieved from the document library, already formatted with
+   * their citation rules. Empty when nothing relevant was found, which is the
+   * common case — most questions are about the student's own week, and the
+   * library has nothing to add to those.
+   */
+  reference = "",
 ): ChatMessage[] {
   return [
-    { role: "system", content: buildSystemPrompt(ctx) },
+    { role: "system", content: buildSystemPrompt(ctx) + reference },
     // Only the last few turns: free models have modest context windows, and
     // older turns rarely change the answer.
     ...history.slice(-6).map((m) => ({ role: m.role, content: m.content }) as ChatMessage),

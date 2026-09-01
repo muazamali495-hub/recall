@@ -34,7 +34,15 @@ const nextConfig: NextConfig = {
    * Bundling it breaks that lookup ("Setting up fake worker failed"), so we
    * keep it as a plain Node dependency resolved from node_modules.
    */
-  serverExternalPackages: ["pdf-to-img", "pdfjs-dist", "@napi-rs/canvas"],
+  serverExternalPackages: [
+    "pdf-to-img",
+    "pdfjs-dist",
+    "@napi-rs/canvas",
+    // Same reasoning: the embedding model ships with native ONNX binaries and
+    // ~117MB of library. Bundling it would drag that into every route rather
+    // than the one that searches documents.
+    "@xenova/transformers",
+  ],
 
   // The default advertises the exact framework and version to anyone probing.
   poweredByHeader: false,
