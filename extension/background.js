@@ -274,6 +274,8 @@ function fetchCoursesInPage(sesskey, method, body) {
  * simply names courses by hand as before.
  */
 async function fetchCourseNames(tabId) {
+  // Every exit records why, because "no names" has four different causes and
+  // the popup is the only place a student can see which one they hit.
   try {
     const [probe] = await chrome.scripting.executeScript({
       target: { tabId },
@@ -282,7 +284,11 @@ async function fetchCourseNames(tabId) {
     });
 
     const sesskey = probe?.result;
-    if (typeof sesskey !== "string" || !sesskey) return [];
+    if (typeof sesskey !== "string" || !sesskey) {
+      return { courses: [], note: "no session key on the page" };
+    }
+
+    let last = "empty reply";
 
     for (const classification of ["all", "inprogress"]) {
       const [call] = await chrome.scripting.executeScript({
@@ -291,13 +297,28 @@ async function fetchCourseNames(tabId) {
         args: [sesskey, METHOD, courseRequest(classification)],
       });
 
-      const courses = extractCourses(call?.result?.payload);
-      if (courses.length > 0) return courses;
+      const result = call?.result;
+      if (!result?.ok) {
+        last = `request failed (${result?.error ?? "unknown"})`;
+        continue;
+      }
+
+      const payload = result.payload;
+      const first = Array.isArray(payload) ? payload[0] : payload;
+      if (first?.error) {
+        last = `Slate refused: ${first.exception?.message ?? first.exception?.errorcode ?? "error"}`;
+        continue;
+      }
+
+      const courses = extractCourses(payload);
+      if (courses.length > 0) return { courses, note: `${courses.length} from Slate` };
+
+      last = `${classification}: 0 courses in reply`;
     }
 
-    return [];
-  } catch {
-    return [];
+    return { courses: [], note: last };
+  } catch (err) {
+    return { courses: [], note: `could not run in page (${err?.message ?? err})` };
   }
 }
 
@@ -358,9 +379,9 @@ async function fetchIcsViaSlate(icalUrl) {
 
     // Same tab, same session, before it is closed below. The names are
     // fetched after the calendar so a failure here can never cost a deadline.
-    const courses = await fetchCourseNames(tabId);
+    const { courses, note: coursesNote } = await fetchCourseNames(tabId);
 
-    return { ics: result.text, courses };
+    return { ics: result.text, courses, coursesNote };
   } finally {
     if (temporary) await chrome.tabs.remove(tabId).catch(() => {});
   }
@@ -388,8 +409,9 @@ export async function syncNow() {
 
   let ics;
   let courses = [];
+  let coursesNote = "";
   try {
-    ({ ics, courses } = await fetchIcsViaSlate(icalUrl));
+    ({ ics, courses, coursesNote } = await fetchIcsViaSlate(icalUrl));
   } catch (err) {
     await setStatus({ ok: false, message: err.message });
     throw err;
@@ -420,6 +442,7 @@ export async function syncNow() {
   // Course names travel separately so the calendar contract stays as it was.
   // Failure here is reported but never fatal: the deadlines are already in.
   let named = 0;
+  let nameNote = coursesNote;
   if (courses.length > 0) {
     const cres = await fetch(`${RECALL_ORIGIN}/api/sync/courses`, {
       method: "POST",
@@ -428,6 +451,8 @@ export async function syncNow() {
     }).catch(() => null);
     const cdata = cres ? await cres.json().catch(() => ({})) : {};
     named = cres?.ok ? (cdata.named ?? 0) : 0;
+    if (!cres?.ok) nameNote = `Recall rejected names (${cres?.status ?? "no response"})`;
+    else nameNote = `${named} names saved of ${courses.length} sent`;
   }
 
   // Recorded here rather than on every attempt: this is the timestamp the
@@ -435,7 +460,7 @@ export async function syncNow() {
   await chrome.storage.local.set({ lastSyncAt: Date.now() });
   await setStatus({
     ok: true,
-    message: `Synced ${data.parsed ?? 0} events` + (named ? `, ${named} course names.` : "."),
+    message: `Synced ${data.parsed ?? 0} events. Course names: ${nameNote || "not attempted"}.`,
   });
   return { ...data, named };
 }

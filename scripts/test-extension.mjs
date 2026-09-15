@@ -95,8 +95,17 @@ const BUILTINS = new Set([
   "parseInt", "parseFloat", "isNaN", "isFinite", "structuredClone",
 ]);
 
+// Prose inside strings is not code. "request failed (unknown)" in a template
+// literal would otherwise register as a call to a function named `failed`.
+const codeOnly = background
+  .replace(/`(?:\\.|[^`\\])*`/g, "``")
+  .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+  .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
+  .replace(/\/\/.*$/gm, "")
+  .replace(/\/\*[\s\S]*?\*\//g, "");
+
 const called = new Set(
-  [...background.matchAll(/(?<![.\w])([a-z][A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1]),
+  [...codeOnly.matchAll(/(?<![.\w])([a-z][A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1]),
 );
 
 const undefinedCalls = [...called].filter(

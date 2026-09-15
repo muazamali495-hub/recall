@@ -55,6 +55,15 @@ export async function POST(request: Request) {
     p_courses: courses,
   });
 
+  // Enough to diagnose "names never arrived" from the log alone: how many the
+  // extension sent, what the first one looked like, and what the database
+  // did with them. Course titles are not sensitive; tokens are not logged.
+  console.log(
+    `[courses] received=${body.courses.length} kept=${courses.length}` +
+      ` named=${data ?? "-"} error=${error?.code ?? "none"}` +
+      (courses[0] ? ` first=${JSON.stringify(courses[0])}` : ""),
+  );
+
   if (error) {
     const unauthorised = error.code === "28000";
     return NextResponse.json(
