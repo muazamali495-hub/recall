@@ -20,6 +20,7 @@ export default async function PlannerPage() {
     supabase
       .from("deadlines")
       .select("id, title, course, section, kind, due_at")
+      .is("done_at", null)
       .gte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
       .limit(10),

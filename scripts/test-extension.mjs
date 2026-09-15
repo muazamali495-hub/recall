@@ -27,7 +27,11 @@ for (const file of files) {
   const source = readFileSync(`extension/${file}`, "utf8");
 
   for (const match of source.matchAll(/import\s+\{([^}]+)\}\s+from\s+"(\.[^"]+)"/g)) {
-    const wanted = match[1].split(",").map((n) => n.trim()).filter(Boolean);
+    // `METHOD as TIMELINE_METHOD` asks the target for METHOD, not the alias.
+    const wanted = match[1]
+      .split(",")
+      .map((n) => n.trim().split(/\s+as\s+/)[0])
+      .filter(Boolean);
     const target = match[2].replace(/^\.\//, "");
 
     if (!files.includes(target)) {
@@ -78,7 +82,7 @@ function parameterNames(source) {
 const declared = new Set([
   ...[...background.matchAll(/(?:async\s+)?function\s+(\w+)/g)].map((m) => m[1]),
   ...[...background.matchAll(/import\s+\{([^}]+)\}/g)].flatMap((m) =>
-    m[1].split(",").map((n) => n.trim()),
+    m[1].split(",").map((n) => n.trim().split(/\s+as\s+/).at(-1)),
   ),
   ...[...background.matchAll(/(?:const|let)\s+(\w+)\s*=/g)].map((m) => m[1]),
   ...parameterNames(background),

@@ -4,6 +4,8 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { EnableReminders } from "./enable-reminders";
 import { TodayDeck, type DeckClass, type DeckDeadline } from "./today-deck";
 import { CourseNamer } from "../courses/course-namer";
+import { DoneButton } from "./done-button";
+import { DoneList, type DoneItem } from "./done-list";
 import { loadCourses } from "@/lib/courses";
 import { courseLabel } from "@/lib/course-label";
 
@@ -68,16 +70,32 @@ export default async function Dashboard() {
   const pakistanNow = new Date(Date.now() + PKT_OFFSET_MS);
   const todayIndex = pakistanNow.getUTCDay();
 
-  const [{ data: profile }, { data: device }, { data: deadlines }, { data: todayClasses }, { count: pushCount }] =
-    await Promise.all([
+  const [
+    { data: profile },
+    { data: device },
+    { data: deadlines },
+    { data: finished },
+    { data: todayClasses },
+    { count: pushCount },
+  ] = await Promise.all([
       supabase.from("profiles").select("full_name").eq("id", user.id).single(),
       supabase.from("sync_devices").select("id").eq("user_id", user.id).maybeSingle(),
       supabase
         .from("deadlines")
         .select("id, title, course, section, kind, due_at, source_url")
+        .is("done_at", null)
         .gte("due_at", new Date(Date.now() - 86_400_000).toISOString())
         .order("due_at", { ascending: true })
         .limit(20),
+      // Finished work stays reachable — folded away, one tap from coming back.
+      // Only what was due recently or is still ahead; last term's is history.
+      supabase
+        .from("deadlines")
+        .select("id, title, course, section, kind, due_at, done_at, done_source, source_url")
+        .not("done_at", "is", null)
+        .gte("due_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
+        .order("done_at", { ascending: false })
+        .limit(30),
       supabase
         .from("class_sessions")
         .select("id, course, start_time, end_time, room")
@@ -87,7 +105,7 @@ export default async function Dashboard() {
         .from("push_subscriptions")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id),
-    ]);
+  ]);
 
   const firstName = profile?.full_name?.split(" ")[0];
   const due = deadlines ?? [];
@@ -137,8 +155,18 @@ export default async function Dashboard() {
       sourceUrl: x.source_url,
     }));
 
+  const doneItems: DoneItem[] = (finished ?? []).map((x) => ({
+    id: x.id,
+    title: x.title,
+    course: label(x),
+    kind: x.kind,
+    doneAt: x.done_at!,
+    source: x.done_source === "slate" ? "slate" : "manual",
+    sourceUrl: x.source_url,
+  }));
+
   const hasClasses = deckClasses.length > 0;
-  const hasDeadlines = due.length > 0;
+  const hasDeadlines = due.length > 0 || doneItems.length > 0;
 
   // The deck already shows the closest four; this list is the rest.
   const laterDeadlines = due.filter((x) => !deckDeadlines.slice(0, 4).some((s) => s.id === x.id));
@@ -212,6 +240,7 @@ export default async function Dashboard() {
                         {when.text}
                       </span>
                     </span>
+                    <DoneButton id={x.id} done={false} />
                   </>
                 );
 
@@ -241,6 +270,8 @@ export default async function Dashboard() {
             </ul>
           </section>
         )}
+
+        <DoneList items={doneItems} />
 
         {/* ---------------- Setup ---------------- */}
         {(!hasClasses || !hasDeadlines) && (

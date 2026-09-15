@@ -7,6 +7,7 @@ import {
 } from "./config.js";
 import { explainFailure, technicalTail } from "./diagnose.js";
 import { courseRequest, extractCourses, METHOD } from "./courses.js";
+import { timelineRequest, extractActionable, METHOD as TIMELINE_METHOD } from "./timeline.js";
 
 const ALARM = "recall-sync";
 const REMINDER_ALARM = "recall-reminders";
@@ -285,7 +286,7 @@ async function fetchCourseNames(tabId) {
 
     const sesskey = probe?.result;
     if (typeof sesskey !== "string" || !sesskey) {
-      return { courses: [], note: "no session key on the page" };
+      return { courses: [], note: "no session key on the page", sesskey: null };
     }
 
     let last = "empty reply";
@@ -311,14 +312,58 @@ async function fetchCourseNames(tabId) {
       }
 
       const courses = extractCourses(payload);
-      if (courses.length > 0) return { courses, note: `${courses.length} from Slate` };
+      if (courses.length > 0) return { courses, note: `${courses.length} from Slate`, sesskey };
 
       last = `${classification}: 0 courses in reply`;
     }
 
-    return { courses: [], note: last };
+    return { courses: [], note: last, sesskey };
   } catch (err) {
-    return { courses: [], note: `could not run in page (${err?.message ?? err})` };
+    return { courses: [], note: `could not run in page (${err?.message ?? err})`, sesskey: null };
+  }
+}
+
+/**
+ * Every event Moodle still considers open, walking its 50-per-page cursor.
+ *
+ * Best effort like the course names. If this fails the sync still succeeds
+ * and nothing is marked done — the server refuses an empty list precisely so
+ * that a failed call here cannot look like a student who finished everything.
+ */
+async function fetchActionable(tabId, sesskey) {
+  if (!sesskey) return { ids: [], note: "no session key" };
+
+  try {
+    // A week back, so overdue-but-unsubmitted work stays in the "open" list.
+    const from = Math.floor(Date.now() / 1000) - 7 * 86400;
+    const ids = [];
+    let after = 0;
+
+    for (let page = 0; page < 10; page++) {
+      const [call] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: fetchCoursesInPage,
+        args: [sesskey, TIMELINE_METHOD, timelineRequest(from, after)],
+      });
+
+      const result = call?.result;
+      if (!result?.ok) return { ids, note: `timeline request failed (${result?.error ?? "unknown"})` };
+
+      const first = Array.isArray(result.payload) ? result.payload[0] : result.payload;
+      if (first?.error) {
+        return { ids, note: `Slate refused timeline: ${first.exception?.message ?? "error"}` };
+      }
+
+      const pageResult = extractActionable(result.payload);
+      ids.push(...pageResult.ids);
+
+      if (!pageResult.more || !pageResult.lastId) break;
+      after = pageResult.lastId;
+    }
+
+    return { ids, note: `${ids.length} still open on Slate` };
+  } catch (err) {
+    return { ids: [], note: `could not read timeline (${err?.message ?? err})` };
   }
 }
 
@@ -379,9 +424,10 @@ async function fetchIcsViaSlate(icalUrl) {
 
     // Same tab, same session, before it is closed below. The names are
     // fetched after the calendar so a failure here can never cost a deadline.
-    const { courses, note: coursesNote } = await fetchCourseNames(tabId);
+    const { courses, note: coursesNote, sesskey } = await fetchCourseNames(tabId);
+    const { ids: actionable, note: doneNote } = await fetchActionable(tabId, sesskey);
 
-    return { ics: result.text, courses, coursesNote };
+    return { ics: result.text, courses, coursesNote, actionable, doneNote };
   } finally {
     if (temporary) await chrome.tabs.remove(tabId).catch(() => {});
   }
@@ -410,8 +456,10 @@ export async function syncNow() {
   let ics;
   let courses = [];
   let coursesNote = "";
+  let actionable = [];
+  let doneNote = "";
   try {
-    ({ ics, courses, coursesNote } = await fetchIcsViaSlate(icalUrl));
+    ({ ics, courses, coursesNote, actionable, doneNote } = await fetchIcsViaSlate(icalUrl));
   } catch (err) {
     await setStatus({ ok: false, message: err.message });
     throw err;
@@ -455,12 +503,28 @@ export async function syncNow() {
     else nameNote = `${named} names saved of ${courses.length} sent`;
   }
 
+  // What Slate still lists as open. Anything missing from it is finished.
+  let doneSummary = doneNote;
+  if (actionable.length > 0) {
+    const sres = await fetch(`${RECALL_ORIGIN}/api/sync/status`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${deviceToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ actionable }),
+    }).catch(() => null);
+    const sdata = sres ? await sres.json().catch(() => ({})) : {};
+    doneSummary = sres?.ok
+      ? `${sdata.done ?? 0} marked done, ${sdata.undone ?? 0} reopened`
+      : `Recall rejected status (${sres?.status ?? "no response"})`;
+  }
+
   // Recorded here rather than on every attempt: this is the timestamp the
   // staleness check reads, and a failed fetch has not refreshed anything.
   await chrome.storage.local.set({ lastSyncAt: Date.now() });
   await setStatus({
     ok: true,
-    message: `Synced ${data.parsed ?? 0} events. Course names: ${nameNote || "not attempted"}.`,
+    message:
+      `Synced ${data.parsed ?? 0} events. Course names: ${nameNote || "not attempted"}. ` +
+      `Done: ${doneSummary || "not attempted"}.`,
   });
   return { ...data, named };
 }

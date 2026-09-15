@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import s from "./dashboard.module.css";
+import { DoneButton } from "./done-button";
 
 export type DeckClass = {
   id: string;
@@ -303,6 +304,7 @@ export function TodayDeck({
                         >
                           {now === null ? "" : untilLabel(ms)}
                         </span>
+                        <DoneButton id={d.id} done={false} size="sm" />
                       </>
                     );
 

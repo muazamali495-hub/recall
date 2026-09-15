@@ -46,6 +46,7 @@ export async function createPlanAction(_prev: PlanState, formData: FormData): Pr
       .from("deadlines")
       .select("id, title, course, kind, due_at")
       .eq("user_id", user.id)
+      .is("done_at", null)
       .gte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
       .limit(10),

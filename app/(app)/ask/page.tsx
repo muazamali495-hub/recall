@@ -16,6 +16,7 @@ export default async function AskPage() {
       .from("deadlines")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
+      .is("done_at", null)
       .gte("due_at", new Date().toISOString()),
     supabase
       .from("class_sessions")
