@@ -35,8 +35,11 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Recall";
   const options = {
     body: payload.body || "",
-    // No icon/badge files exist yet; passing a 404 path can make some
-    // platforms drop the notification entirely.
+    // The PWA icons. Without an icon Android shows a blank bell, and the
+    // badge is what appears in the status bar — it must be a simple
+    // monochrome-friendly shape, so the maskable icon does.
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
     tag: payload.tag || undefined, // replaces an earlier notification for the same thing
     data: { url: safeTarget(payload.url) },
     vibrate: [80, 40, 80],
