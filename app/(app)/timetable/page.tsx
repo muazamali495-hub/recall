@@ -5,6 +5,8 @@ export const maxDuration = 60;
 import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { TimetableUpload } from "./timetable-upload";
+import { CourseNamer } from "../courses/course-namer";
+import { loadCourses } from "@/lib/courses";
 
 export default async function TimetablePage() {
   const supabase = await createClient();
@@ -12,6 +14,8 @@ export default async function TimetablePage() {
   const user = await getCurrentUser();
 
   if (!user) redirect("/");
+
+  const { rows: courseRows } = await loadCourses(user.id);
 
   const { count } = await supabase
     .from("class_sessions")
@@ -29,6 +33,8 @@ export default async function TimetablePage() {
       </p>
 
       <TimetableUpload />
+
+      <CourseNamer courses={courseRows} />
     </main>
   );
 }

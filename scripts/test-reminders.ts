@@ -35,8 +35,8 @@ for (const p of planned) {
 }
 
 const ids = planned.map((p) => p.refId.split(":")[0]);
-const expect = (label: string, pass: boolean) =>
-  console.log(`  ${pass ? "PASS" : "FAIL"}  ${label}`);
+const expect = (label: string, pass: boolean, detail?: string) =>
+  console.log(`  ${pass ? "PASS" : "FAIL"}  ${label}${!pass && detail ? ` — got "${detail}"` : ""}`);
 
 console.log("\nRules:");
 expect("class 10 min away is reminded", ids.includes("c1"));
@@ -81,3 +81,18 @@ expect("tightest window wins for the 1h quiz (2h, not 24h)", quiz?.windowKey ===
 const last = planned.find((p) => p.refId === "d5");
 expect("quiz 23 min away gets a last-minute alert", Boolean(last));
 expect("and it uses the 0.5h window", last?.windowKey === "0.5h");
+
+// A named course shows its name on the lock screen; an unnamed one falls back
+// to the code. Both with the section, when Slate gave one.
+{
+  const named = planReminders(NOW, prefs, [], [
+    { id: "n1", title: "Quiz 3", course: "CS13410", course_name: "Intro to Machine Learning", section: "BSCS-7A", kind: "quiz", due_at: "2026-08-19T10:00:00Z" },
+    { id: "n2", title: "Assignment 2", course: "EES07104", section: "BSCS-7A", kind: "assignment", due_at: "2026-08-19T10:00:00Z" },
+  ]);
+  expect("a named course puts its name in the notification",
+    named.find((p) => p.refId === "n1")?.body === "Quiz 3 · Intro to Machine Learning · BSCS-7A",
+    named.find((p) => p.refId === "n1")?.body);
+  expect("an unnamed course falls back to the code",
+    named.find((p) => p.refId === "n2")?.body === "Assignment 2 · EES07104 · BSCS-7A",
+    named.find((p) => p.refId === "n2")?.body);
+}

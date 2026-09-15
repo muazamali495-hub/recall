@@ -4,6 +4,7 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { buildMessages, type StudentContext } from "@/lib/ask";
 import { callChat, LlmNotConfigured } from "@/lib/llm";
 import { findPassages, passagesPrompt } from "@/lib/rag";
+import { courseLabel, namesFrom } from "@/lib/course-label";
 import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -42,12 +43,12 @@ export async function askAction(
   const pktNow = new Date(Date.now() + PKT_OFFSET_MS);
   const todayIndex = pktNow.getUTCDay();
 
-  const [{ data: profile }, { data: deadlines }, { data: classes }, { data: allClasses }] =
+  const [{ data: profile }, { data: deadlines }, { data: classes }, { data: allClasses }, { data: named }] =
     await Promise.all([
       supabase.from("profiles").select("full_name").eq("id", user.id).single(),
       supabase
         .from("deadlines")
-        .select("title, course, kind, due_at")
+        .select("title, course, section, kind, due_at")
         .eq("user_id", user.id)
         .gte("due_at", new Date().toISOString())
         .order("due_at", { ascending: true })
@@ -59,7 +60,10 @@ export async function askAction(
         .eq("day_of_week", todayIndex)
         .order("start_time", { ascending: true }),
       supabase.from("class_sessions").select("course").eq("user_id", user.id),
+      supabase.from("courses").select("code, name").eq("user_id", user.id),
     ]);
+
+  const names = namesFrom(named);
 
   const ctx: StudentContext = {
     name: profile?.full_name?.split(" ")[0] ?? null,
@@ -77,12 +81,14 @@ export async function askAction(
     courses: Array.from(
       new Set([
         ...(allClasses ?? []).map((c) => c.course),
-        ...(deadlines ?? []).map((d) => d.course).filter((c): c is string => Boolean(c)),
+        // Named when the student has named them: "Intro to Machine Learning"
+        // is something a model can reason about, "CS13410" is not.
+        ...(deadlines ?? []).map((d) => (d.course ? (names.get(d.course) ?? d.course) : null)).filter((c): c is string => Boolean(c)),
       ]),
     ).slice(0, 15),
     deadlines: (deadlines ?? []).map((d) => ({
       title: d.title,
-      course: d.course,
+      course: courseLabel(d.course, d.section, names),
       kind: d.kind,
       dueLabel: new Date(d.due_at).toLocaleString("en-GB", {
         weekday: "long",

@@ -15,7 +15,11 @@ export type ClassRow = {
 export type DeadlineRow = {
   id: string;
   title: string;
+  /** The course code Slate sent. */
   course: string | null;
+  /** What the student named it, when they have. Joined in by the batch. */
+  course_name?: string | null;
+  section?: string | null;
   kind: string;
   due_at: string;
 };
@@ -145,7 +149,10 @@ export function planReminders(
       refId: d.id,
       windowKey: `${hit}h`,
       title: `${label} ${when}`,
-      body: d.course ? `${d.title} · ${d.course}` : d.title,
+      // A notification has one line to say what this is for. "Intro to Machine
+      // Learning" says it; "CS13410" does not. The code is dropped here, not
+      // appended — on a lock screen there is no room to show both.
+      body: [d.title, d.course_name || d.course, d.section].filter(Boolean).join(" · "),
       url: "/dashboard",
     });
   }

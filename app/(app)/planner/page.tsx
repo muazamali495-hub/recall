@@ -5,6 +5,8 @@ export const maxDuration = 60;
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { PlannerForm, type DeadlineOption } from "./planner-form";
+import { loadCourses } from "@/lib/courses";
+import { courseLabel } from "@/lib/course-label";
 
 export default async function PlannerPage() {
   const supabase = await createClient();
@@ -17,7 +19,7 @@ export default async function PlannerPage() {
   const [{ data: deadlines }, { count: classCount }] = await Promise.all([
     supabase
       .from("deadlines")
-      .select("id, title, course, kind, due_at")
+      .select("id, title, course, section, kind, due_at")
       .gte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
       .limit(10),
@@ -27,10 +29,12 @@ export default async function PlannerPage() {
       .eq("user_id", user.id),
   ]);
 
+  const { names } = await loadCourses(user.id);
+
   const options: DeadlineOption[] = (deadlines ?? []).map((d) => ({
     id: d.id,
     title: d.title,
-    course: d.course,
+    course: courseLabel(d.course, d.section, names),
     kind: d.kind,
     dueLabel: new Date(d.due_at).toLocaleDateString("en-GB", {
       weekday: "short",

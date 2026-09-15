@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { EnableReminders } from "./enable-reminders";
 import { TodayDeck, type DeckClass, type DeckDeadline } from "./today-deck";
+import { CourseNamer } from "../courses/course-namer";
+import { loadCourses } from "@/lib/courses";
+import { courseLabel } from "@/lib/course-label";
 
 const KIND_STYLES: Record<string, { chip: string; ring: string; stroke: string; label: string }> = {
   exam: { chip: "border-rose/40 bg-rose/15 text-rose", ring: "border-rose/25 bg-rose/10", stroke: "#ff8080", label: "Exam" },
@@ -71,7 +74,7 @@ export default async function Dashboard() {
       supabase.from("sync_devices").select("id").eq("user_id", user.id).maybeSingle(),
       supabase
         .from("deadlines")
-        .select("id, title, course, kind, due_at, source_url")
+        .select("id, title, course, section, kind, due_at, source_url")
         .gte("due_at", new Date(Date.now() - 86_400_000).toISOString())
         .order("due_at", { ascending: true })
         .limit(20),
@@ -88,6 +91,12 @@ export default async function Dashboard() {
 
   const firstName = profile?.full_name?.split(" ")[0];
   const due = deadlines ?? [];
+
+  // Slate sends a code; the student supplies the name; the label joins them.
+  // Resolved here once, so the deck and the list below cannot disagree.
+  const { names, rows: courseRows } = await loadCourses(user.id);
+  const label = (x: { course: string | null; section?: string | null }) =>
+    courseLabel(x.course, x.section ?? null, names);
 
   /**
    * Turn today's "HH:MM" into an absolute instant.
@@ -122,7 +131,7 @@ export default async function Dashboard() {
     .map((x) => ({
       id: x.id,
       title: x.title,
-      course: x.course,
+      course: label(x),
       kind: x.kind,
       dueAtMs: new Date(x.due_at!).getTime(),
       sourceUrl: x.source_url,
@@ -162,6 +171,8 @@ export default async function Dashboard() {
           dueToday={deckDeadlines}
         />
 
+        <CourseNamer courses={courseRows} compact />
+
         {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && (
           <EnableReminders
             vapidKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY}
@@ -191,7 +202,7 @@ export default async function Dashboard() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium tracking-tight">{x.title}</span>
-                      <span className="block truncate text-xs text-faint">{x.course ?? "—"}</span>
+                      <span className="block truncate text-xs text-faint">{label(x)}</span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1.5">
                       <span className={`rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold ${style.chip}`}>

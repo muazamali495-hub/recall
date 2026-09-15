@@ -5,7 +5,10 @@ export type DeadlineKind = "assignment" | "quiz" | "exam" | "other";
 export type ParsedDeadline = {
   uid: string;
   title: string;
+  /** The course code, e.g. "CS13410". Moodle never exports the full name. */
   course: string | null;
+  /** The section, e.g. "BSCS-7A", when Slate's shortname carries one. */
+  section: string | null;
   kind: DeadlineKind;
   due_at: string | null; // ISO 8601
   source_url: string | null;
@@ -106,14 +109,29 @@ function tidyTitle(raw: string): string {
 }
 
 /**
- * Moodle's CATEGORIES holds the full course shortname, e.g.
- * "MAT01212|11-BSCS-3A-112001-SUM26". The part before the pipe is the
- * course code a student actually recognises.
+ * Moodle's CATEGORIES holds the course *shortname*, which at UOL looks like
+ * "MAT01212|11-BSCS-3A-112001-SUM26": the code, a pipe, then an internal
+ * identifier that happens to contain the section.
+ *
+ * The full course name ("Linear Algebra") is not in the feed at all — Moodle
+ * exports the shortname and nothing else — so it cannot be recovered here.
+ * That is why students name their courses once in Recall. What CAN be
+ * recovered is the section, which this used to discard along with the rest
+ * of the suffix.
  */
-function tidyCourse(raw: string | null): string | null {
-  if (!raw) return null;
-  const code = raw.split("|")[0]?.trim();
-  return code?.length ? code : raw;
+export function splitCourse(raw: string | null): { code: string | null; section: string | null } {
+  if (!raw) return { code: null, section: null };
+
+  const [head, ...rest] = raw.split("|");
+  const code = head?.trim() || null;
+  const suffix = rest.join("|");
+
+  // "11-BSCS-3A-112001-SUM26" -> "BSCS-3A". Programme letters, a dash, a
+  // semester digit or two, and an optional section letter. Anchored on word
+  // boundaries so the numeric ids on either side cannot bleed in.
+  const section = suffix.match(/\b([A-Z]{2,6}-\d{1,2}[A-Z]?)\b/)?.[1] ?? null;
+
+  return { code: code ?? raw.trim() ?? null, section };
 }
 
 /** Strips Moodle's HTML out of a course/category string. */
@@ -208,7 +226,9 @@ export function parseIcs(icsText: string): ParsedDeadline[] {
     const rawSummary = clean(String(vevent.getFirstPropertyValue("summary") ?? "")) ?? "Untitled";
     const summary = tidyTitle(rawSummary);
     const sourceUrl = clean(String(vevent.getFirstPropertyValue("url") ?? "")) ?? null;
-    const course = tidyCourse(clean(String(vevent.getFirstPropertyValue("categories") ?? "")));
+    const { code: course, section } = splitCourse(
+      clean(String(vevent.getFirstPropertyValue("categories") ?? "")),
+    );
 
     let dueAt: string | null = null;
     const dtstart = vevent.getFirstPropertyValue("dtstart");
@@ -224,6 +244,7 @@ export function parseIcs(icsText: string): ParsedDeadline[] {
       uid: String(uid),
       title: summary,
       course,
+      section,
       kind: classify(rawSummary, sourceUrl),
       due_at: dueAt,
       source_url: sourceUrl,
