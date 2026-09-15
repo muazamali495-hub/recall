@@ -6,6 +6,7 @@ import {
   isSlateCalendarUrl,
 } from "./config.js";
 import { explainFailure, technicalTail } from "./diagnose.js";
+import { courseRequest, extractCourses, METHOD } from "./courses.js";
 
 const ALARM = "recall-sync";
 const REMINDER_ALARM = "recall-reminders";
@@ -241,6 +242,65 @@ async function waitForSlateReady(tabId, timeoutMs = 30000) {
   }
 }
 
+/**
+ * Runs in the page's OWN JavaScript world, not the extension's isolated one.
+ * Moodle keeps its session key on window.M.cfg, which an isolated script
+ * cannot see; this is the one place the extension steps across.
+ */
+function readSesskey() {
+  return globalThis.M?.cfg?.sesskey ?? null;
+}
+
+/** Runs inside the Slate page. Must be self-contained — it is serialised across. */
+function fetchCoursesInPage(sesskey, method, body) {
+  const url = `/lib/ajax/service.php?sesskey=${encodeURIComponent(sesskey)}&info=${method}`;
+  return fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+    .then((r) => r.json())
+    .then((payload) => ({ ok: true, payload }))
+    .catch((e) => ({ ok: false, error: String(e) }));
+}
+
+/**
+ * Every course the student is enrolled in, with its full name.
+ *
+ * Best effort throughout. This runs after the calendar has already been
+ * fetched, and a name is a nicety on top of a deadline — if Slate's API is
+ * off, or its shape has moved, the sync must still succeed and the student
+ * simply names courses by hand as before.
+ */
+async function fetchCourseNames(tabId) {
+  try {
+    const [probe] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: readSesskey,
+    });
+
+    const sesskey = probe?.result;
+    if (typeof sesskey !== "string" || !sesskey) return [];
+
+    for (const classification of ["all", "inprogress"]) {
+      const [call] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: fetchCoursesInPage,
+        args: [sesskey, METHOD, courseRequest(classification)],
+      });
+
+      const courses = extractCourses(call?.result?.payload);
+      if (courses.length > 0) return courses;
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 /** Uses an open Slate tab if there is one; otherwise opens a hidden one briefly. */
 async function fetchIcsViaSlate(icalUrl) {
   const open = await chrome.tabs.query({ url: `${SLATE_ORIGIN}/*` });
@@ -296,7 +356,11 @@ async function fetchIcsViaSlate(icalUrl) {
       throw new Error(explainFailure(result) + advice + technicalTail(result));
     }
 
-    return result.text;
+    // Same tab, same session, before it is closed below. The names are
+    // fetched after the calendar so a failure here can never cost a deadline.
+    const courses = await fetchCourseNames(tabId);
+
+    return { ics: result.text, courses };
   } finally {
     if (temporary) await chrome.tabs.remove(tabId).catch(() => {});
   }
@@ -323,8 +387,9 @@ export async function syncNow() {
   }
 
   let ics;
+  let courses = [];
   try {
-    ics = await fetchIcsViaSlate(icalUrl);
+    ({ ics, courses } = await fetchIcsViaSlate(icalUrl));
   } catch (err) {
     await setStatus({ ok: false, message: err.message });
     throw err;
@@ -352,9 +417,25 @@ export async function syncNow() {
     throw new Error(message);
   }
 
+  // Course names travel separately so the calendar contract stays as it was.
+  // Failure here is reported but never fatal: the deadlines are already in.
+  let named = 0;
+  if (courses.length > 0) {
+    const cres = await fetch(`${RECALL_ORIGIN}/api/sync/courses`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${deviceToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ courses }),
+    }).catch(() => null);
+    const cdata = cres ? await cres.json().catch(() => ({})) : {};
+    named = cres?.ok ? (cdata.named ?? 0) : 0;
+  }
+
   // Recorded here rather than on every attempt: this is the timestamp the
   // staleness check reads, and a failed fetch has not refreshed anything.
   await chrome.storage.local.set({ lastSyncAt: Date.now() });
-  await setStatus({ ok: true, message: `Synced ${data.parsed ?? 0} events.` });
-  return data;
+  await setStatus({
+    ok: true,
+    message: `Synced ${data.parsed ?? 0} events` + (named ? `, ${named} course names.` : "."),
+  });
+  return { ...data, named };
 }

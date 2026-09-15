@@ -16,10 +16,11 @@ export type CourseRow = {
 /**
  * Where a student names their courses.
  *
- * Slate only ever sends the code, so until this is filled in every deadline
- * reads "Quiz 2 - CS13410". Six courses, once a semester. The suggestion is
- * pre-filled when a title gave it away, so the common case is confirming
- * rather than typing.
+ * Names normally arrive from Slate itself — the extension reads the enrolled
+ * course list on every sync — so this is the override, not the first port of
+ * call. It still matters: a student may prefer "ML" to the official title, or
+ * Slate's API may be off for a term. A name set here is never replaced by a
+ * sync.
  */
 export function CourseNamer({ courses, compact = false }: { courses: CourseRow[]; compact?: boolean }) {
   const router = useRouter();
@@ -59,16 +60,18 @@ export function CourseNamer({ courses, compact = false }: { courses: CourseRow[]
             {unnamed === 1 ? "One course needs a name" : `${unnamed} courses need names`}
           </p>
           <p className="mb-4 text-sm text-muted">
-            Slate only sends course codes. Name them once and every deadline and
-            reminder will say which course it&apos;s for.
+            Names come from Slate automatically on the next sync. If one is still
+            missing after that, or you&apos;d rather call it something shorter,
+            set it here.
           </p>
         </>
       ) : (
         <>
           <h2 className="mb-1 text-sm font-semibold text-muted">Your courses</h2>
           <p className="mb-3 text-xs text-faint">
-            Slate sends only the code. What you type here appears on every deadline,
-            every reminder and in Ask Recall.
+            Names are read from Slate when the extension syncs. Anything you type
+            here overrides that and is never replaced — useful for a shorter name
+            than the official one.
           </p>
         </>
       )}

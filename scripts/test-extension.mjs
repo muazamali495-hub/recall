@@ -91,6 +91,8 @@ const KEYWORDS = new Set([
 
 const BUILTINS = new Set([
   "fetch", "setTimeout", "setInterval", "clearInterval", "clearTimeout",
+  "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+  "parseInt", "parseFloat", "isNaN", "isFinite", "structuredClone",
 ]);
 
 const called = new Set(

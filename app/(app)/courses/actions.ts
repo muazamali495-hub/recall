@@ -30,8 +30,10 @@ export async function nameCourse(code: string, name: string): Promise<NameResult
   if (!cleanName) {
     await supabase.from("courses").delete().eq("user_id", user.id).eq("code", cleanCode);
   } else {
+    // Marked manual so a later Slate sync leaves it alone — the student's
+    // choice outranks the official title.
     const { error } = await supabase.from("courses").upsert(
-      { user_id: user.id, code: cleanCode, name: cleanName, updated_at: new Date().toISOString() },
+      { user_id: user.id, code: cleanCode, name: cleanName, source: "manual", updated_at: new Date().toISOString() },
       { onConflict: "user_id,code" },
     );
     if (error) return { ok: false, error: "Could not save that." };
