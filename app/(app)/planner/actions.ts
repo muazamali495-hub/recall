@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { buildStudyPlan, type PlannerContext, type StudyPlan } from "@/lib/planner";
-import { LlmNotConfigured } from "@/lib/llm";
+import { LlmNotConfigured, studentFacing } from "@/lib/llm";
 import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -117,6 +117,6 @@ export async function createPlanAction(_prev: PlanState, formData: FormData): Pr
     if (err instanceof LlmNotConfigured) {
       return { error: "AI features aren't set up yet. Add OPENROUTER_API_KEY to .env.local." };
     }
-    return { error: err instanceof Error ? err.message : "Could not build a plan." };
+    return { error: studentFacing(err, "Could not build a plan.", "planner") };
   }
 }

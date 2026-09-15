@@ -1,6 +1,7 @@
 /**
  * Runs the real extraction against a local timetable file.
- * Usage:  node scripts/test-timetable.ts "<path to pdf or image>"
+ * Usage:  node --import ./scripts/register.mjs scripts/test-timetable.ts "<image>" [section]
+ *         OPENROUTER_MODELS=<model> to try one model on its own
  */
 import { readFileSync } from "node:fs";
 import { extractTimetable } from "../lib/vision.ts";
@@ -27,7 +28,14 @@ const mime = path.toLowerCase().endsWith(".pdf")
 
 console.log(`Reading ${path} (${(bytes.length / 1024).toFixed(0)} KB, ${mime})…\n`);
 
-const classes = await extractTimetable(bytes.toString("base64"), mime);
+if (mime === "application/pdf") {
+  console.log("PDFs are rendered to page images inside the app; give this script a PNG or JPEG.");
+  process.exit(1);
+}
+
+const started = Date.now();
+const classes = await extractTimetable([bytes.toString("base64")], process.argv[3] ?? "");
+console.log(`(${((Date.now() - started) / 1000).toFixed(1)}s)`);
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 console.log(`Extracted ${classes.length} classes:\n`);

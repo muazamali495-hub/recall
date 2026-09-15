@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractTimetable, LlmNotConfigured, type ExtractedClass } from "@/lib/vision";
+import { studentFacing } from "@/lib/llm";
 import { checkLimit, LIMITS } from "@/lib/rate-limit";
 
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -99,7 +100,7 @@ export async function extractTimetableAction(
     if (err instanceof LlmNotConfigured) {
       return { error: "Timetable reading isn't set up yet. Add OPENROUTER_API_KEY to .env.local.", section };
     }
-    return { error: err instanceof Error ? err.message : "Could not read that timetable.", section };
+    return { error: studentFacing(err, "Could not read that timetable.", "timetable"), section };
   }
 }
 

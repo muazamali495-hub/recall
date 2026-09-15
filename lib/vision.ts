@@ -20,31 +20,11 @@ const DAYS = [
 ] as const;
 
 /**
- * We go through OpenRouter rather than calling Google directly: the Gemini
- * developer API refuses requests from some regions (Pakistan included), while
- * OpenRouter proxies models from anywhere.
- *
- * Free vision pools are shared and slow under load — reading a timetable can
- * take 45 seconds or more, and it barely depends on how many pages we send.
- * callVisionModel races two pools and takes whichever answers first.
+ * Which model reads the image is decided in lib/llm.ts: every configured
+ * free provider is tried in a staggered race, and the winner's answer is
+ * parsed here. Free vision pools are shared and slow under load — reading a
+ * timetable can take 45 seconds on a bad day and four on a good one.
  */
-const MODEL_CHAIN = (
-  process.env.OPENROUTER_MODELS ??
-  [
-    // Tested against a real UOL timetable: minimax returned well-formed JSON
-    // with 9 classes in 7 seconds. Of the other free vision pools available at
-    // the time, dots, nemotron and the auto-router all returned empty content
-    // on the same image, and both gemma pools were 429.
-    "minimax/minimax-m3:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "openrouter/free",
-    "google/gemma-4-31b-it:free",
-  ].join(",")
-)
-  .split(",")
-  .map((m) => m.trim())
-  .filter(Boolean);
-
 export { LlmNotConfigured };
 
 function buildPrompt(section: string) {
@@ -86,7 +66,7 @@ export async function extractTimetable(
 ): Promise<ExtractedClass[]> {
   if (images.length === 0) return [];
 
-  const raw = await callVisionModel(buildPrompt(section), images, MODEL_CHAIN);
+  const raw = await callVisionModel(buildPrompt(section), images);
 
   const parsed = parseJsonLoosely<{ classes?: Array<Record<string, string>> }>(raw);
   if (!parsed) throw new Error("Could not read that timetable. Try a clearer image.");

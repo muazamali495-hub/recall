@@ -2,7 +2,7 @@
 
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { buildMessages, type StudentContext } from "@/lib/ask";
-import { callChat, LlmNotConfigured } from "@/lib/llm";
+import { callChat, LlmNotConfigured, studentFacing } from "@/lib/llm";
 import { findPassages, passagesPrompt } from "@/lib/rag";
 import { courseLabel, namesFrom } from "@/lib/course-label";
 import { checkLimit, LIMITS } from "@/lib/rate-limit";
@@ -123,6 +123,6 @@ export async function askAction(
     if (err instanceof LlmNotConfigured) {
       return { error: "AI features aren't set up yet. Add OPENROUTER_API_KEY to .env.local." };
     }
-    return { error: err instanceof Error ? err.message : "Could not get an answer." };
+    return { error: studentFacing(err, "Could not get an answer.", "ask") };
   }
 }
