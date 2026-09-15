@@ -74,9 +74,12 @@ function explain(err: unknown): string {
     return "Notifications are blocked for Recall. Allow them in your browser's site settings, then try again.";
   }
   if (/push service|could not connect|registration failed/i.test(raw) || name === "AbortError") {
+    if (/Brave/i.test(navigator.userAgent) || "brave" in navigator) {
+      return "Brave blocks Google's push service by default. Turn on \"Use Google services for push messaging\" in Brave settings → Privacy, then try again.";
+    }
     return (
-      "Your browser couldn't reach Google's push service. On Android: open Recall in Chrome itself (not inside WhatsApp or Instagram), " +
-      "check that Google Play Services and Chrome's notifications are turned on in phone settings, then try again."
+      "Your browser couldn't reach Google's push service. This is usually the Wi-Fi network — switch to mobile data and try again. " +
+      "If it still fails: open Recall in Chrome itself (not inside WhatsApp or Instagram), check Google Play Services is on and updated, then try again."
     );
   }
   if (/service worker|sw\.js/i.test(raw)) {
@@ -181,7 +184,18 @@ export function EnableReminders({
       setError(explain(err));
       // The browser's own words, small, so a screenshot is enough to diagnose.
       const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      setDetail(raw);
+      // Browser and install mode too — "push service error" reads the same
+      // in Chrome, Brave and Samsung Internet, and each has a different fix.
+      const ua = navigator.userAgent;
+      const browser =
+        /Brave/i.test(ua) || "brave" in navigator ? "Brave"
+        : /SamsungBrowser/i.test(ua) ? "Samsung Internet"
+        : /OPR\//i.test(ua) ? "Opera"
+        : /EdgA/i.test(ua) ? "Edge"
+        : /Chrome/i.test(ua) ? "Chrome"
+        : "other";
+      const mode = window.matchMedia("(display-mode: standalone)").matches ? "installed app" : "browser tab";
+      setDetail(`${raw} · ${browser}, ${mode}${/Android/i.test(ua) ? ", Android" : ""}`);
     } finally {
       setBusy(false);
     }
